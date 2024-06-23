@@ -11,10 +11,32 @@ from os.path import isfile, join
 import missingno as msno
 import seaborn as sns
 import matplotlib as mpl
+import geopandas as gpd
 
 sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
 sns.set_theme(style="white")
 mpl.rcParams['font.family'] = 'Times New Roman'
+
+def weather_df_to_gdf(input_path, output_path, epsg):
+    """Project the traffic data to geodataframe
+
+    Args:
+        input_path (string): path to processed data
+        output_path (string): path to save the geodataframe
+        epsg (string): the coordinate system
+
+    Returns:
+        None
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    
+    df = pd.read_excel(input_path)
+    print(df)
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.LON, df.LAT), crs='EPSG:' + epsg)
+    gdf.to_file(output_path + "weather_stations.shp")
+    
+    return None
 
 def NCDC_weather_data_obtain(meta_path, output_path, start_year, stop_year):
     """Obtain the weather data from NCDC
@@ -277,6 +299,6 @@ if __name__ == "__main__":
                                     
     weather_missing_data_visualization("./result/weather/stations/", "./result/weather/missing")
     """
-    NCDC_weather_data_imputation("./result/weather/stations/", "./result/weather/stations_imputed/")
-    
+    #NCDC_weather_data_imputation("./result/weather/stations/", "./result/weather/stations_imputed/")
+    weather_df_to_gdf("./data/weather/weather_meta.xlsx", "./result/weather/shapefile/", "4167")
     
