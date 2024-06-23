@@ -16,6 +16,7 @@ def basic_statistics(input_df, save_path):
     Returns:
         None
     """
+    
     datetime_column = input_df["Datetime"]
     input_df = input_df.drop(columns=["Datetime"])
     column_list = input_df.columns.values.tolist()

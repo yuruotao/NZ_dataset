@@ -203,12 +203,14 @@ def traffic_missing_filter(meta_path, input_path, threashold, gpd_output_path, o
     """Delete the stations whose missing data percentage reach the threashold
 
     Args:
+        meta_path (string): xlsx containing the NCDC station data
         input_path (string): path to the raw data
         threashold (float): threashold for deletion
-        output_path (string): path to save the deleted raw data
+        gpd_output_path (string): path to save the geopandas dataframe
+        output_path (string): path to save the filtered raw data
 
     Returns:
-        dataframe: raw data deleted
+        None
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -351,7 +353,6 @@ def NCDC_weather_data_imputation(filtered_meta_df_path, data_path, output_path):
 
     return None
 
-
 if __name__ == "__main__":
     """
     NCDC_weather_data_obtain("./data/isd-history.csv", "./data/weather/", 2013, 2022)
@@ -362,11 +363,10 @@ if __name__ == "__main__":
                                     "./result/weather/stations/",
                                     2013, 2022)                      
     weather_missing_data_visualization("./result/weather/stations/", "./result/weather/missing")
-     
+    
     traffic_missing_filter("./data/weather/weather_meta.xlsx", "./result/weather/stations/", 
                            30, "./result/weather/filtered_shp/", "./result/weather/")
     """
     NCDC_weather_data_imputation("./result/weather/missing_value_filtered_stations.xlsx",
         "./result/weather/stations/", "./result/weather/stations_imputed/")
-    
     
