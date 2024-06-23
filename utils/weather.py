@@ -32,7 +32,6 @@ def weather_df_to_gdf(input_path, output_path, epsg):
         os.makedirs(output_path)
     
     df = pd.read_excel(input_path)
-    print(df)
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.LON, df.LAT), crs='EPSG:' + epsg)
     gdf.to_file(output_path + "weather_stations.shp")
     
@@ -108,14 +107,17 @@ def NCDC_weather_data_station_merge(meta_path,
     for index, row in meta_df.iterrows():
         Station_ID = str(row["Station_ID"])
         print(Station_ID)
+        
+        # For each station
+        year_df = pd.DataFrame()
+        temp_time_index = pd.DataFrame()
+        temp_time_index["Datetime"] = time_index
         for year in range(start_year, stop_year):
-            temp_time_index = pd.DataFrame()
-            temp_time_index["Datetime"] = time_index
-
+            
             temp_path = input_path + str(year) + "/" + Station_ID + ".csv"
             temp_df = pd.read_csv(temp_path)
             
-            if temp_df.shape[0] == 6:
+            if temp_df.shape[0] <= 10:
                 pass
             else:
                 temp_df = temp_df.astype({"DATE":"datetime64[ns]"})
@@ -123,8 +125,11 @@ def NCDC_weather_data_station_merge(meta_path,
                     year_df = temp_df
                 else:
                     year_df = pd.concat([year_df, temp_df], ignore_index=True)
+        try:
+            output_df = pd.merge(temp_time_index, year_df, left_on="Datetime", right_on="DATE", how="left")
+        except:
+            output_df = temp_time_index
             
-        output_df = pd.merge(temp_time_index, year_df, left_on="Datetime", right_on="DATE", how="left")
         output_df.to_excel(output_path + Station_ID + ".xlsx", index=False)
 
     return None
@@ -159,10 +164,14 @@ def weather_missing_data_visualization(input_path, output_path):
     dir_list = [(input_path + dir) for dir in dir_list]
     
     for dir in dir_list:
+        print(dir)
         Station_ID = dir.split("/")[-1].split(".")[0]
         temp_df = pd.read_excel(dir)
-        weather_df[Station_ID] = temp_df["STATION"]
-    
+        try:
+            weather_df[Station_ID] = temp_df["STATION"]
+        except:
+            weather_df[Station_ID] = np.nan
+            
     temp_weather_df = weather_df.set_index("Datetime")
     
     # Divide into chunks
@@ -190,7 +199,59 @@ def weather_missing_data_visualization(input_path, output_path):
         
     return None
 
-def NCDC_weather_data_imputation(data_path, output_path):
+def traffic_missing_filter(meta_path, input_path, threashold, gpd_output_path, output_path):
+    """Delete the stations whose missing data percentage reach the threashold
+
+    Args:
+        input_path (string): path to the raw data
+        threashold (float): threashold for deletion
+        output_path (string): path to save the deleted raw data
+
+    Returns:
+        dataframe: raw data deleted
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    
+    if not os.path.exists(gpd_output_path):
+        os.makedirs(gpd_output_path)
+    
+    time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
+    weather_df = pd.DataFrame()
+    weather_df["Datetime"] = time_index
+    
+    dir_list = os.listdir(input_path)
+    dir_list = [(input_path + dir) for dir in dir_list]
+    
+    for dir in dir_list:
+        Station_ID = dir.split("/")[-1].split(".")[0]
+        print(Station_ID)
+        temp_df = pd.read_excel(dir)
+        try:
+            weather_df[Station_ID] = temp_df["STATION"]
+        except:
+            weather_df[Station_ID] = np.nan
+    
+    # Calculate percentage of missing values in each column
+    missing_percentages = weather_df.isna().mean() * 100
+    
+    # Drop columns where the percentage of missing values exceeds the threshold
+    columns_to_drop = missing_percentages[missing_percentages > threashold].index
+    processed_df = weather_df.drop(columns=columns_to_drop)
+    stations_higher_than_threshold = processed_df.columns.to_list()
+    stations_higher_than_threshold.remove("Datetime")
+    
+    meta_df = pd.read_excel(meta_path)
+    meta_df = meta_df.astype({"Station_ID": "str"})
+    filtered_meta_df = meta_df[meta_df['Station_ID'].isin(stations_higher_than_threshold)].reset_index(drop=True)
+    print(filtered_meta_df)
+    filtered_meta_df.to_excel(output_path + "missing_value_filtered_stations.xlsx", index=False)
+    gdf = gpd.GeoDataFrame(filtered_meta_df, geometry=gpd.points_from_xy(filtered_meta_df.LON, filtered_meta_df.LAT), crs='EPSG:' + "4167")
+    gdf.to_file(gpd_output_path + "weather_stations_filtered.shp")
+    
+    return None
+
+def NCDC_weather_data_imputation(filtered_meta_df_path, data_path, output_path):
     """Reformat and impute the missing data of weather data
     Add relative humidity "RH" to the dataframe
 
@@ -203,8 +264,11 @@ def NCDC_weather_data_imputation(data_path, output_path):
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path)
-        
-    station_files = [f for f in listdir(data_path) if isfile(join(data_path, f))]
+    
+    filtered_meta_df = pd.read_excel(filtered_meta_df_path)
+    station_list = filtered_meta_df["Station_ID"].to_list()
+    
+    station_files = [str(station) + ".xlsx" for station in station_list]
     for station_file in station_files:
         print(station_file)
         temp_df = pd.read_excel(data_path + station_file)
@@ -291,14 +355,18 @@ def NCDC_weather_data_imputation(data_path, output_path):
 if __name__ == "__main__":
     """
     NCDC_weather_data_obtain("./data/isd-history.csv", "./data/weather/", 2013, 2022)
+    weather_df_to_gdf("./data/weather/weather_meta.xlsx", "./data/weather/shapefile/", "4167")
     
     NCDC_weather_data_station_merge("./data/weather/weather_meta.xlsx",
                                     "./data/weather/", 
                                     "./result/weather/stations/",
-                                    2013, 2022)
-                                    
+                                    2013, 2022)                      
     weather_missing_data_visualization("./result/weather/stations/", "./result/weather/missing")
+     
+    traffic_missing_filter("./data/weather/weather_meta.xlsx", "./result/weather/stations/", 
+                           30, "./result/weather/filtered_shp/", "./result/weather/")
     """
-    #NCDC_weather_data_imputation("./result/weather/stations/", "./result/weather/stations_imputed/")
-    weather_df_to_gdf("./data/weather/weather_meta.xlsx", "./result/weather/shapefile/", "4167")
+    NCDC_weather_data_imputation("./result/weather/missing_value_filtered_stations.xlsx",
+        "./result/weather/stations/", "./result/weather/stations_imputed/")
+    
     

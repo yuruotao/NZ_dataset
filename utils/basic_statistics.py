@@ -6,7 +6,6 @@ import numpy as np
 import seaborn as sns
 sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
 
-
 def basic_statistics(input_df, save_path):
     """Calculate the basic statistics of input_df
 
@@ -21,7 +20,7 @@ def basic_statistics(input_df, save_path):
     input_df = input_df.drop(columns=["Datetime"])
     column_list = input_df.columns.values.tolist()
 
-    stats_dir = save_path + "/"
+    stats_dir = save_path
     
     if not os.path.exists(stats_dir):
         os.makedirs(stats_dir)
