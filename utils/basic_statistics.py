@@ -1,12 +1,16 @@
+# Coding: utf-8
+# Script for calculating the basic statistics
 import pandas as pd
 import os
 import missingno as msno
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
-sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-def basic_statistics(input_df, save_path):
+
+def basic_statistics(input_df):
     """Calculate the basic statistics of input_df
 
     Args:
@@ -16,31 +20,23 @@ def basic_statistics(input_df, save_path):
     Returns:
         None
     """
+    try:
+        input_df = input_df.drop(columns=["DATETIME"])
+    except:
+        pass
     
-    datetime_column = input_df["Datetime"]
-    input_df = input_df.drop(columns=["Datetime"])
-    column_list = input_df.columns.values.tolist()
-
-    stats_dir = save_path
-    
-    if not os.path.exists(stats_dir):
-        os.makedirs(stats_dir)
-
-    STA_df = pd.DataFrame({'Mean':input_df.mean(), 
-                           'Standard deviation':input_df.std(),
-                           'Skew':input_df.skew(),
-                           'Kurtosis':input_df.kurtosis(),
-                           '0th percentile':input_df.quantile(q=0),
-                           '2.5th percentile':input_df.quantile(q=0.025),
-                           '50th percentile':input_df.quantile(q=0.5),
-                           '97.5th percentile':input_df.quantile(q=0.975),
-                           '100th percentile':input_df.quantile(q=1)
+    STA_df = pd.DataFrame({'MEAN':input_df.mean(), 
+                           'STD':input_df.std(),
+                           'SKEW':input_df.skew(),
+                           'KURTOSIS':input_df.kurtosis(),
+                           'PERCENTILE_0':input_df.quantile(q=0),
+                           'PERCENTILE_2_5':input_df.quantile(q=0.025),
+                           'PERCENTILE_50':input_df.quantile(q=0.5),
+                           'PERCENTILE_97_5':input_df.quantile(q=0.975),
+                           'PERCENTILE_100':input_df.quantile(q=1)
                            },
                    dtype = 'float')
-
-    STA_df = STA_df.round(2)
-    print(STA_df)
-    STA_df.to_excel(stats_dir + '/basic_statistics.xlsx', float_format='%.2f')
+    STA_df["INDICATOR"] = input_df.columns
     
-    return None
+    return STA_df
 

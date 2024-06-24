@@ -5,7 +5,6 @@ import numpy as np
 import os
 import time
 import matplotlib.pyplot as plt
-import gdelt
 import requests
 from os import listdir
 from os.path import isfile, join
@@ -13,33 +12,69 @@ import missingno as msno
 import seaborn as sns
 import matplotlib as mpl
 import geopandas as gpd
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+from basic_statistics import basic_statistics
 
 sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
 sns.set_theme(style="white")
 mpl.rcParams['font.family'] = 'Times New Roman'
 
-def weather_df_to_gdf(input_path, output_path, epsg):
-    """Project the traffic data to geodataframe
+Base = declarative_base()
 
-    Args:
-        input_path (string): path to processed data
-        output_path (string): path to save the geodataframe
-        epsg (string): the coordinate system
+# CTRY STATE ICAO LAT LON ELEV(M) BEGIN END
+class filtered_weather_meta(Base):
+    __tablename__ = 'filtered_weather_meta'
+    STATION_ID = Column(String, primary_key=True, unique=True, nullable=False)
+    USAF = Column(String)
+    WBAN = Column(String)
+    STATION_NAME = Column(String)
+    CTRY = Column(String)
+    STATE = Column(String)
+    ICAO = Column(String)
+    LAT = Column(Float)
+    LON = Column(Float)
+    ELEV = Column(Float)
+    BEGIN = Column(Integer)
+    END = Column(Integer)
 
-    Returns:
-        None
-    """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    
-    df = pd.read_excel(input_path)
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.LON, df.LAT), crs='EPSG:' + epsg)
-    gdf.to_file(output_path + "weather_stations.shp")
-    
-    return None
+# Datetime TEMP DEWP SLP STP VISIB WDSP MXSPD GUST MAX MIN PRCP SNDP RH
+class filtered_weather(Base):
+    __tablename__ = 'filtered_weather'
+    ID = Column(Integer, primary_key=True, unique=True, nullable=False)
+    STATION_ID = Column(String)
+    DATETIME = Column(DateTime)
+    TEMP = Column(Float)
+    DEWP = Column(Float)
+    SLP = Column(Float)
+    STP = Column(Float)
+    VISIB = Column(Float)
+    WDSP = Column(Float)
+    MXSPD = Column(Float)
+    GUST = Column(Float)
+    MAX = Column(Float)
+    MIN = Column(Float)
+    PRCP = Column(Float)
+    SNDP = Column(Float)
+    RH = Column(Float)
+class basic_statistics_sql_class(Base):
+    __tablename__ = 'basic_statistics_weather'
+    ID = Column(Integer, primary_key=True, unique=True, nullable=False)
+    INDEX = Column(String)
+    INDICATOR = Column(String)
+    MEAN = Column(Float)
+    STD = Column(Float)
+    SKEW = Column(Float)
+    KURTOSIS = Column(Float)
+    PERCENTILE_0 = Column(Float)
+    PERCENTILE_2_5 = Column(Float)
+    PERCENTILE_50 = Column(Float)
+    PERCENTILE_97_5 = Column(Float)
+    PERCENTILE_100 = Column(Float)
 
-
-def weather_missing_data_visualization(input_path, output_path):
+def weather_missing_data_visualization(input_df, output_path):
     """Visualize the missing data of flow data
 
     Args:
@@ -61,23 +96,7 @@ def weather_missing_data_visualization(input_path, output_path):
     if not os.path.exists(missing_bar_path):
         os.makedirs(missing_bar_path)
     
-    time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
-    weather_df = pd.DataFrame()
-    weather_df["Datetime"] = time_index
-    
-    dir_list = os.listdir(input_path)
-    dir_list = [(input_path + dir) for dir in dir_list]
-    
-    for dir in dir_list:
-        print(dir)
-        Station_ID = dir.split("/")[-1].split(".")[0]
-        temp_df = pd.read_excel(dir)
-        try:
-            weather_df[Station_ID] = temp_df["STATION"]
-        except:
-            weather_df[Station_ID] = np.nan
-            
-    temp_weather_df = weather_df.set_index("Datetime")
+    temp_weather_df = input_df.set_index("DATETIME")
     
     # Divide into chunks
     chunks = [temp_weather_df.iloc[:, i:i+20] for i in range(0, len(temp_weather_df.columns), 20)]
@@ -104,61 +123,35 @@ def weather_missing_data_visualization(input_path, output_path):
         
     return None
 
-def traffic_missing_filter(meta_path, input_path, threashold, gpd_output_path, output_path):
-    """Delete the stations whose missing data percentage reach the threashold
+def weather_missing_filter(meta_df, merged_df, threshold, engine):
+    """Delete the stations whose missing data percentage reach the threshold
 
     Args:
-        meta_path (string): xlsx containing the NCDC station data
-        input_path (string): path to the raw data
-        threashold (float): threashold for deletion
-        gpd_output_path (string): path to save the geopandas dataframe
-        output_path (string): path to save the filtered raw data
+        meta_df (dataframe): dataframe containing the NCDC station meta data
+        merged_df (merged_df): raw data merged_df
+        threshold (float): threshold for deletion
+        engine (sqlalchemy_engine): engine to save the filtered meta dataframe
 
     Returns:
         None
     """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    
-    if not os.path.exists(gpd_output_path):
-        os.makedirs(gpd_output_path)
-    
-    time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
-    weather_df = pd.DataFrame()
-    weather_df["Datetime"] = time_index
-    
-    dir_list = os.listdir(input_path)
-    dir_list = [(input_path + dir) for dir in dir_list]
-    
-    for dir in dir_list:
-        Station_ID = dir.split("/")[-1].split(".")[0]
-        print(Station_ID)
-        temp_df = pd.read_excel(dir)
-        try:
-            weather_df[Station_ID] = temp_df["STATION"]
-        except:
-            weather_df[Station_ID] = np.nan
+
     
     # Calculate percentage of missing values in each column
-    missing_percentages = weather_df.isna().mean() * 100
+    missing_percentages = merged_df.isna().mean() * 100
     
     # Drop columns where the percentage of missing values exceeds the threshold
-    columns_to_drop = missing_percentages[missing_percentages > threashold].index
-    processed_df = weather_df.drop(columns=columns_to_drop)
+    columns_to_drop = missing_percentages[missing_percentages > threshold].index
+    processed_df = merged_df.drop(columns=columns_to_drop)
     stations_higher_than_threshold = processed_df.columns.to_list()
-    stations_higher_than_threshold.remove("Datetime")
-    
-    meta_df = pd.read_excel(meta_path)
-    meta_df = meta_df.astype({"Station_ID": "str"})
-    filtered_meta_df = meta_df[meta_df['Station_ID'].isin(stations_higher_than_threshold)].reset_index(drop=True)
-    print(filtered_meta_df)
-    filtered_meta_df.to_excel(output_path + "missing_value_filtered_stations.xlsx", index=False)
-    gdf = gpd.GeoDataFrame(filtered_meta_df, geometry=gpd.points_from_xy(filtered_meta_df.LON, filtered_meta_df.LAT), crs='EPSG:' + "4167")
-    gdf.to_file(gpd_output_path + "weather_stations_filtered.shp")
-    
-    return None
+    stations_higher_than_threshold.remove("DATETIME")
 
-def NCDC_weather_data_imputation(filtered_meta_df_path, data_path, output_path):
+    filtered_meta_df = meta_df[meta_df['STATION_ID'].isin(stations_higher_than_threshold)].reset_index(drop=True)
+    filtered_meta_df.to_sql('filtered_weather_meta', con=engine, if_exists='replace', index=False)
+
+    return filtered_meta_df
+
+def NCDC_weather_data_imputation(filtered_meta_df, merged_df, engine):
     """Reformat and impute the missing data of weather data
     Add relative humidity "RH" to the dataframe
 
@@ -169,100 +162,73 @@ def NCDC_weather_data_imputation(filtered_meta_df_path, data_path, output_path):
     Returns:
         None
     """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+
+    station_id_list = filtered_meta_df["STATION_ID"].to_list()
     
-    filtered_meta_df = pd.read_excel(filtered_meta_df_path)
-    station_list = filtered_meta_df["Station_ID"].to_list()
-    
-    station_files = [str(station) + ".xlsx" for station in station_list]
-    for station_file in station_files:
-        print(station_file)
-        temp_df = pd.read_excel(data_path + station_file)
-        temp_df = temp_df[["Datetime",
-                           "TEMP", "DEWP", "SLP", "STP", "VISIB", 
-                           "WDSP", "MXSPD", "GUST", "MAX", "MIN", "PRCP", 
-                           "SNDP"]]
-        
-        start_date = '2013-01-01'
-        end_date = '2021-12-31'
-        temp_df = temp_df[(temp_df['Datetime'] >= start_date) & (temp_df['Datetime'] <= end_date)]
-        
-        # Missing data
-        temp_df.replace(99.99, np.nan, inplace=True)
-        temp_df.replace(999.9, np.nan, inplace=True)
-        temp_df.replace(9999.9, np.nan, inplace=True)
-        
-        # Degree to Celsius
-        temp_df['TEMP'] = temp_df.apply(lambda x: (x['TEMP']-32)*(5/9), axis=1)
-        temp_df['MAX'] = temp_df.apply(lambda x: (x['MAX']-32)*(5/9), axis=1)
-        temp_df['MIN'] = temp_df.apply(lambda x: (x['MIN']-32)*(5/9), axis=1)
-        temp_df['DEWP'] = temp_df.apply(lambda x: (x['DEWP']-32)*(5/9), axis=1)
-        
-        # Dew point to relative humidity
-        def calculate_relative_humidity(dew_point_celsius, air_temperature_celsius):
-            # Calculate saturation vapor pressure at dew point and air temperature
-            es_td = 6.112 * np.exp(17.67 * dew_point_celsius / (dew_point_celsius + 243.5))
-            es_t = 6.112 * np.exp(17.67 * air_temperature_celsius / (air_temperature_celsius + 243.5))
+    for station_id in station_id_list:
+        print(station_id)
+        temp_df = merged_df[merged_df["STATION_ID"] == station_id]
+        datetime_column = temp_df["DATETIME"]
+        station_id_column = temp_df["STATION_ID"]
+        temp_df = temp_df.drop(columns=["DATETIME", "ID", "STATION_ID"])
+        basic_statistics_df = basic_statistics(temp_df)
+        basic_statistics_df["INDEX"] = str(station_id)
 
-            # Calculate relative humidity
-            relative_humidity = 100 * (es_td / es_t)
-
-            return relative_humidity
-        
-        # RH for relative humidity
-        temp_df['RH'] = temp_df.apply(lambda x: calculate_relative_humidity(x['DEWP'], x['TEMP']), axis=1)
-        
-        # Millibar to kPa
-        temp_df['SLP'] = temp_df.apply(lambda x: x['SLP']/10, axis=1)
-        temp_df['STP'] = temp_df.apply(lambda x: x['STP']/10, axis=1)
-        
-        # Miles to km
-        temp_df['VISIB'] = temp_df.apply(lambda x: x['VISIB']*1.609, axis=1)
-        
-        # Knots to m/s
-        temp_df['WDSP'] = temp_df.apply(lambda x: x['WDSP']*0.51444, axis=1)
-        temp_df['MXSPD'] = temp_df.apply(lambda x: x['MXSPD']*0.51444, axis=1)
-        temp_df['GUST'] = temp_df.apply(lambda x: x['GUST']*0.51444, axis=1)
-        
-        # Inches to meter
-        temp_df['PRCP'] = temp_df.apply(lambda x: x['PRCP']*0.0254, axis=1)
-        temp_df['SNDP'] = temp_df.apply(lambda x: x['SNDP']*0.0254, axis=1)
-        
-        datetime_column = temp_df["Datetime"]
-        temp_df = temp_df.drop(columns=["Datetime"])
-
-        forward_df = temp_df.shift(-7*24)
-        backward_df = temp_df.shift(7*24)
-        
+        forward_df = temp_df.shift(-1)
+        backward_df = temp_df.shift(1)
         average_values = (forward_df + backward_df) / 2
+        
         temp_df = temp_df.copy()
         temp_df[temp_df.isna() & forward_df.notna() & backward_df.notna()] = average_values[temp_df.isna() & forward_df.notna() & backward_df.notna()]
         temp_df[temp_df.isna() & forward_df.notna() & backward_df.isna()] = forward_df[temp_df.isna() & forward_df.notna() & backward_df.isna()]
         temp_df[temp_df.isna() & backward_df.notna() & forward_df.isna()] = backward_df[temp_df.isna() & backward_df.notna() & forward_df.isna()]
 
         temp_df = pd.concat([datetime_column, temp_df], axis=1)
-        temp_df.set_index('Datetime', inplace=True)
+        temp_df.set_index('DATETIME', inplace=True)
         # Set Datetime column as index
-
         for column in temp_df.columns:
             mean_value = temp_df[column].mean()
             # Fill NaN values with the mean
             temp_df[column].fillna(mean_value, inplace=True)
 
         temp_df = temp_df.reset_index()
-        imputed_df = temp_df.drop(columns=["Datetime"])
-        imputed_df = pd.concat([datetime_column, imputed_df], axis=1)
-
-        imputed_df.to_excel(output_path + station_file, index=False)
+        temp_df["STATION_ID"] = station_id_column
+        
+        temp_df.to_sql('filtered_weather', con=engine, if_exists='append', index=False)
+        basic_statistics_df.to_sql('basic_statistics', con=engine, if_exists='append', index=False)
 
     return None
 
 if __name__ == "__main__":
-    weather_missing_data_visualization("./result/weather/stations/", "./result/weather/missing")
+    process_db_address = 'sqlite:///./NZDB_process.db'
+    process_engine = create_engine(process_db_address)
+    Base.metadata.create_all(process_engine)
     
-    traffic_missing_filter("./data/weather/weather_meta.xlsx", "./result/weather/stations/", 
-                           30, "./result/weather/filtered_shp/", "./result/weather/")
+    db_address = 'sqlite:///./data/NZDB/NZDB.db'
+    engine = create_engine(db_address)
     
-    NCDC_weather_data_imputation("./result/weather/missing_value_filtered_stations.xlsx",
-        "./result/weather/stations/", "./result/weather/stations_imputed/")
+    weather_meta_query = 'SELECT * FROM weather_meta'
+    weather_meta_df = pd.read_sql(weather_meta_query, engine)
+
+    weather_query = 'SELECT * FROM weather'
+    weather_df = pd.read_sql(weather_query, engine)
+    weather_df = weather_df.astype({"DATETIME":"datetime64[ns]"})
+    temp_weather_df = weather_df[["DATETIME", "STATION_ID", "TEMP"]]
+    
+    time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
+    datetime_df = pd.DataFrame()
+    datetime_df["DATETIME"] = time_index
+    
+    pivot_df = temp_weather_df.pivot(index='DATETIME', columns='STATION_ID', values='TEMP')
+    merged_df = datetime_df.merge(pivot_df, on='DATETIME', how='left')
+    
+    # Visualize the missing data
+    #weather_missing_data_visualization(merged_df, "./result/weather/missing")
+    
+    # Filter based on missing value percentage
+    Session = sessionmaker(bind=process_engine)
+    session = Session()
+    
+    filtered_meta_df = weather_missing_filter(weather_meta_df, merged_df, 30, process_engine)
+    NCDC_weather_data_imputation(filtered_meta_df, weather_df, process_engine)
+    

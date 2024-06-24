@@ -8,7 +8,7 @@ from os import listdir
 from os.path import isfile, join
 import time
 
-from utils.basic_statistics import basic_statistics
+from utils.basic_statistics import basic_statistics, basic_statistics_sql_class
 
 
 
