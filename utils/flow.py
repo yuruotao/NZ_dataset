@@ -51,7 +51,6 @@ class flow(Base):
     WEIGHT = Column(String)
     DIRECTION = Column(Integer)
 
-
 class basic_statistics_sql_class(Base):
     __tablename__ = 'basic_statistics_flow'
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
@@ -203,11 +202,12 @@ if __name__ == "__main__":
     flow_meta_query = 'SELECT * FROM flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, engine)
 
-    flow_query = 'SELECT * FROM flow'
+    flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
     flow_df = pd.read_sql(flow_query, engine)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
+    print(flow_df)
     
-    
+    """
     temp_flow_df = flow_df[["DATETIME", "STATION_ID", "TEMP"]]
     
     time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
@@ -226,4 +226,4 @@ if __name__ == "__main__":
     
     filtered_meta_df = flow_missing_filter(flow_meta_df, merged_df, 30, process_engine)
     flow_data_imputation(filtered_meta_df, flow_df, process_engine)
-    
+    """
