@@ -1,5 +1,5 @@
 # Coding: utf-8
-
+# Main analysis
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,6 +9,9 @@ from os.path import isfile, join
 import time
 
 from utils.basic_statistics import basic_statistics
+
+
+
 
 if __name__ == "__main__":
     # Flow
@@ -32,7 +35,7 @@ if __name__ == "__main__":
     for path in filtered_weather_list:
         print(path)
         temp_df = pd.read_excel(path)
-        basic_statistics(temp_df, "./result/weather/basic_statistics/" + path.split("/")[-1].strip(".xlsx") + "/")
+        basic_statistics(temp_df, "./result/weather/filtered_basic_statistics/" + path.split("/")[-1].strip(".xlsx") + "/")
     
     
     ###########################################################

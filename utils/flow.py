@@ -9,13 +9,15 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from shapely.ops import snap
 import seaborn as sns
+from sqlalchemy import create_engine
 import time
 
 sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
 sns.set_theme(style="white")
 mpl.rcParams['font.family'] = 'Times New Roman'
 
-def traffic_flow_import_20_22(input_path, site_path, output_path):
+
+def traffic_flow_import_20_22(input_path, siteRef_list, engine):
     """Import traffic flow data of 2020 to 2022
     https://opendata-nzta.opendata.arcgis.com/datasets/tms-traffic-quarter-hourly-oct-2020-to-jan-2022/about
     https://opendata-nzta.opendata.arcgis.com/datasets/b90f8908910f44a493c6501c3565ed2d_0
@@ -27,65 +29,80 @@ def traffic_flow_import_20_22(input_path, site_path, output_path):
     Returns:
         Dataframe: dataframe containing traffic flow during 2020 and 2022
     """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-        
-    # Create Datetime dataframe
-    time_index = pd.date_range(start="2020-10-01 00:00:00", end="2022-01-31 23:45:00", freq="15min")
-    time_series_df = pd.DataFrame({'Datetime': time_index})
-    
+
     # Read all files within the folder
     traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
     traffic_df = pd.DataFrame()
     for file in traffic_flow_list:
         print(file)
         temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
+        # START_DATE SITE_ALIAS REGION_NAME SITE_REFERENCE CLASS_WEIGHT SITE_DESCRIPTION LANE_NUMBER FLOW_DIRECTION TRAFFIC_COUNT
+        temp_df["SITE_REFERENCE"] = temp_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
+        temp_df = temp_df[temp_df["SITE_REFERENCE"].isin(siteRef_list)]
+        temp_df = temp_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
+                                                "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight", 
+                                                "FLOW_DIRECTION":"Direction"})
+        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'])
+        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+        with engine.begin() as connection:
+            temp_df.to_sql(name='users', con=connection, if_exists='append')
+        
+            
         traffic_df = pd.concat([traffic_df, temp_df], ignore_index=True)
-
-    # For each site, save to separate xlsx file
-    traffic_df["SITE_REFERENCE"] = traffic_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
-    traffic_df = traffic_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
-                                            "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight"})
-    traffic_df['Datetime'] = pd.to_datetime(traffic_df['Datetime'])
-    traffic_df = traffic_df.groupby(["Weight", "siteRef", "Datetime"])[["Flow"]].sum().reset_index()
     
-    """
-    traffic_site_gdf = gpd.read_file(site_path)
-    
-    traffic_site_gdf["siteRef"] = traffic_site_gdf["siteRef"].apply(lambda x: str(x).zfill(8))
-    site_set = set(traffic_site_gdf["siteRef"])
-    time_site_df = time_series_df
-    for site in site_set:
-        print(site)
-        temp_df = traffic_df[traffic_df["siteRef"] == site]
-        if len(temp_df.index) != 0:        
-            temp_df = temp_df.astype({"Flow":float})
-            # For one set, sum traffic from all directions
-            flow_dir_set = set(temp_df["FLOW_DIRECTION"])
-            flow = 0
-            for flow_site in flow_dir_set:
-                merge_df = temp_df[temp_df["FLOW_DIRECTION"] == flow_site]
-                merge_df = pd.merge(time_series_df, merge_df, on='Datetime', how="left")
-                if flow == 0:
-                    dir_temp_df = merge_df
-                else:
-                    dir_temp_df["Flow"] = dir_temp_df["Flow"] + merge_df["Flow"]
-                print(flow)
-                flow = flow + 1
-
-            dir_temp_df = dir_temp_df.sort_values(by=["Datetime"])
-            dir_temp_df = dir_temp_df.reindex()
-            dir_temp_df = dir_temp_df[["Datetime", "Flow"]]
-            
-            time_site_df[site] = dir_temp_df["Flow"]
-            
-    time_site_df.to_excel(output_path + ".xlsx", index=False)
-    """
     return traffic_df
 
-def traffic_flow_import_13_20(input_path, site_path, output_path):
-    # https://opendata-nzta.opendata.arcgis.com/datasets/b719083bbb09489087649f1fc03ba53a/about
-    pass
+def traffic_flow_import_13_20(input_path, siteRef_list):
+    # 
+    """Import traffic flow data of 2013 to 2020
+    https://opendata-nzta.opendata.arcgis.com/datasets/b719083bbb09489087649f1fc03ba53a/about
+
+    Args:
+        input_path (string): path of traffic flow between 2013 and 2020
+        output_path (string): path to save the output
+
+    Returns:
+        Dataframe: dataframe containing traffic flow during 2013 and 2020
+    """
+
+    # Read all files within the folder
+    traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
+    traffic_df = pd.DataFrame()
+    for file in traffic_flow_list:
+        print(file)
+        temp_df = pd.read_csv(input_path + file)
+        # class siteRef startDatetime endDatetime direction count
+        temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
+        temp_df = temp_df[temp_df["siteRef"].isin(siteRef_list)]
+        temp_df = temp_df.rename(columns={"startDatetime":"Datetime", "count":"Flow", 
+                                          "class":"Weight", "direction":"Direction"})
+        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'], format='%d-%b-%Y %H:%M')
+        temp_df['Weight'] = temp_df['Weight'].replace('H', 'Heavy')
+        temp_df['Weight'] = temp_df['Weight'].replace('L', 'Light')
+        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+    
+    
+    return 
+
+def traffic_flow_siteRef(siteRef_list):
+    engine = create_engine('sqlite:///./result/traffic/database/traffic_data.db')
+    
+    # For year 13 to 20
+    #traffic_df_13_20 = traffic_flow_import_13_20("./data/traffic/flow_data_13_20/", siteRef_list)
+    #print(traffic_df_13_20)
+    
+    # For year 20 to 21
+    traffic_df_20_21 = traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", siteRef_list, engine)
+    #print(traffic_df_20_21)
+    
+    #traffic_df = pd.concat([traffic_df_13_20, traffic_df_20_21], ignore_index=True)
+    #traffic_df.to_excel("./result/traffic/flow_data_13_21.xlsx", index=False)
+
+    return
+
+
 
 def traffic_missing_data_visualization(input_path, output_path):
     """Visualize the missing data of flow data
@@ -311,8 +328,6 @@ def imputation(input_df, imputation_method, save_path):
     
     return imputed_df
 
-
-
 def imputation_visualization(raw_data_df, start_time, end_time, method_list, column, output_path):
     """Visualize the imputation result, comparing methods
 
@@ -379,6 +394,15 @@ def imputation_visualization(raw_data_df, start_time, end_time, method_list, col
 
 
 if __name__ == "__main__":
+    
+    traffic_site_gdf = gpd.read_file("./data/traffic/traffic_monitor_sites/State_highway_traffic_monitoring_sites.shp")
+    traffic_site_gdf["siteRef"] = traffic_site_gdf["siteRef"].apply(lambda x: str(x).zfill(8))
+    siteRef_list = traffic_site_gdf["siteRef"].to_list()
+    traffic_flow_siteRef(siteRef_list)
+    
+    
+    
+    """
     time1 = time.time()
     traffic_df_20_22 = traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", 
                                            "./data/traffic/traffic_monitor_sites/State_highway_traffic_monitoring_sites.shp",
@@ -386,7 +410,7 @@ if __name__ == "__main__":
     time2 = time.time-time1
     print(time2)
     print(traffic_df_20_22)
-    
+    """
     """
     heavy_traffic_df = traffic_flow_import_20_22("./data/traffic/flow_data/", 
                                            "./data/traffic/traffic_monitor_sites/traffic_monitor_sites.shp",
