@@ -59,6 +59,7 @@ class filtered_weather(Base):
     PRCP = Column(Float)
     SNDP = Column(Float)
     RH = Column(Float)
+
 class basic_statistics_sql_class(Base):
     __tablename__ = 'basic_statistics_weather'
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
@@ -195,12 +196,12 @@ def NCDC_weather_data_imputation(filtered_meta_df, merged_df, engine):
         temp_df["STATION_ID"] = station_id_column
         
         temp_df.to_sql('filtered_weather', con=engine, if_exists='append', index=False)
-        basic_statistics_df.to_sql('basic_statistics', con=engine, if_exists='append', index=False)
+        basic_statistics_df.to_sql('basic_statistics_weather', con=engine, if_exists='append', index=False)
 
     return None
 
 if __name__ == "__main__":
-    process_db_address = 'sqlite:///./NZDB_process.db'
+    process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
     process_engine = create_engine(process_db_address)
     Base.metadata.create_all(process_engine)
     
@@ -232,3 +233,5 @@ if __name__ == "__main__":
     filtered_meta_df = weather_missing_filter(weather_meta_df, merged_df, 30, process_engine)
     NCDC_weather_data_imputation(filtered_meta_df, weather_df, process_engine)
     
+    session.commit()
+    session.close()

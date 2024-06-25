@@ -1,22 +1,29 @@
 # Coding: utf-8
 # Main analysis
-import numpy as np
 import pandas as pd
+import numpy as np
+import os
+import time
 import matplotlib.pyplot as plt
-import geopandas as gpd
+import requests
 from os import listdir
 from os.path import isfile, join
-import time
-
-from utils.basic_statistics import basic_statistics, basic_statistics_sql_class
-
+import missingno as msno
+import seaborn as sns
+import matplotlib as mpl
+import geopandas as gpd
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 
 
 if __name__ == "__main__":
+    process_db_address = 'sqlite:///./NZDB_process.db'
+    process_engine = create_engine(process_db_address)
+    
     # Flow
-    # Calculate the basic statistics for each flow station
-    #basic_statistics()
+
     
     # Light and Heavy
     

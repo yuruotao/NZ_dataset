@@ -15,10 +15,9 @@ def basic_statistics(input_df):
 
     Args:
         input_df (dataframe): dataframe containing data to be computed
-        save_path (string): path to save the basic statistics
 
     Returns:
-        None
+        dataframe: the result dataframe
     """
     try:
         input_df = input_df.drop(columns=["DATETIME"])

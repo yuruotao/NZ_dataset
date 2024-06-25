@@ -41,16 +41,6 @@ class filtered_flow_meta(Base):
     LAT = Column(Float)
     LON = Column(Float)
 
-# Datetime siteRef Flow Weight Direction
-class flow(Base):
-    __tablename__ = 'filtered_flow'
-    ID = Column(Integer, primary_key=True, unique=True, nullable=False)
-    SITEREF = Column(String)
-    DATETIME = Column(DateTime)
-    FLOW = Column(Float)
-    WEIGHT = Column(String)
-    DIRECTION = Column(Integer)
-
 class basic_statistics_sql_class(Base):
     __tablename__ = 'basic_statistics_flow'
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
@@ -65,6 +55,61 @@ class basic_statistics_sql_class(Base):
     PERCENTILE_50 = Column(Float)
     PERCENTILE_97_5 = Column(Float)
     PERCENTILE_100 = Column(Float)
+
+class filtered_siteref_base(Base):
+    __abstract__ = True
+    ID = Column(Integer, primary_key=True, unique=True, nullable=False)
+    SITEREF = Column(String)
+    DATETIME = Column(DateTime)
+    FLOW = Column(Float)
+    WEIGHT = Column(String)
+    DIRECTION = Column(Integer)
+
+def traffic_flow_import_20_22(input_path, siteRef_list, engine):
+    """Import traffic flow data of 2020 to 2022
+    https://opendata-nzta.opendata.arcgis.com/datasets/tms-traffic-quarter-hourly-oct-2020-to-jan-2022/about
+    https://opendata-nzta.opendata.arcgis.com/datasets/b90f8908910f44a493c6501c3565ed2d_0
+
+    Args:
+        input_path (string): path of traffic flow between 2020 and 2022
+        siteRef_list (list): list contain strings of siteRef
+        engine (sqlalchemy_engine): engine used for database creation
+
+    Returns:
+        None
+    """
+
+    # Read all files within the folder
+    traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
+    for file in traffic_flow_list:
+        if "2021" in file:
+            print(file)
+            temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
+            # START_DATE SITE_ALIAS REGION_NAME SITE_REFERENCE CLASS_WEIGHT SITE_DESCRIPTION LANE_NUMBER FLOW_DIRECTION TRAFFIC_COUNT
+            temp_df["SITE_REFERENCE"] = temp_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
+            temp_df = temp_df[temp_df["SITE_REFERENCE"].isin(siteRef_list)]
+            temp_df = temp_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
+                                                    "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight", 
+                                                    "FLOW_DIRECTION":"Direction"})
+            temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+            temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'])
+            temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+            temp_df.columns = temp_df.columns.str.upper()
+            
+            temp_df_heavy = temp_df[temp_df["WEIGHT"] == "Heavy"]
+            temp_df_heavy.drop(["WEIGHT"], axis=1, inplace=True)
+            print(temp_df_heavy)
+            time.sleep(1000)
+            temp_df_light = temp_df[temp_df["WEIGHT"] == "Light"]
+            temp_df_light.drop(["WEIGHT"], axis=1, inplace=True)
+            
+            temp_df_heavy.to_sql('filtered_flow_heavy', con=engine, if_exists='append', index=False)
+            temp_df_light.to_sql('filtered_flow_light', con=engine, if_exists='append', index=False)
+            
+        else:
+            pass
+
+    return None
 
 def flow_missing_data_visualization(input_df, output_path):
     """Visualize the missing data of flow data
@@ -192,7 +237,7 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine):
     return None
 
 if __name__ == "__main__":
-    process_db_address = 'sqlite:///./NZDB_process.db'
+    process_db_address = 'sqlite:///./data/NZDB_flow_process.db'
     process_engine = create_engine(process_db_address)
     Base.metadata.create_all(process_engine)
     
@@ -201,20 +246,31 @@ if __name__ == "__main__":
     
     flow_meta_query = 'SELECT * FROM flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, engine)
+    flow_meta_df.to_sql('filtered_flow_meta', con=process_engine, if_exists='replace', index=False)
 
-    flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
-    flow_df = pd.read_sql(flow_query, engine)
+    # If RAM is huge, select from the established database
+    #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2021')"
+    #flow_df = pd.read_sql(flow_query, engine)
+    #flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
+    #print(flow_df)
+    
+    # If RAM is limited, create a new database with only desired time range
+    siteRef_list = flow_meta_df["SITEREF"].to_list()
+    traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", siteRef_list, process_engine)
+    flow_query = "SELECT * FROM filtered_flow_light"
+    flow_df = pd.read_sql(flow_query, process_engine)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
     print(flow_df)
     
-    """
-    temp_flow_df = flow_df[["DATETIME", "STATION_ID", "TEMP"]]
     
-    time_index = pd.date_range(start="2013-01-01", end="2021-12-31", freq="D")
+    """
+    temp_flow_df = flow_df[["DATETIME", "SITEREF", "FLOW"]]
+    
+    time_index = pd.date_range(start="2021-01-01", end="2021-12-31", freq="D")
     datetime_df = pd.DataFrame()
     datetime_df["DATETIME"] = time_index
     
-    pivot_df = temp_flow_df.pivot(index='DATETIME', columns='STATION_ID', values='TEMP')
+    pivot_df = temp_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
     merged_df = datetime_df.merge(pivot_df, on='DATETIME', how='left')
     
     # Visualize the missing data

@@ -294,4 +294,5 @@ if __name__ == "__main__":
     # Flow
     #siteRef_list = flow_meta_gdf["SITEREF"].to_list()
     #traffic_flow_database_upload(siteRef_list, engine)
-    
+    session.commit()
+    session.close()
