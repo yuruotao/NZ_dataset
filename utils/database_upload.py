@@ -15,6 +15,8 @@ import time
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+import xml.etree.ElementTree as ET
 
 Base = declarative_base()
 
@@ -81,6 +83,15 @@ class flow(Base):
     WEIGHT = Column(String)
     DIRECTION = Column(Integer)
 
+
+class holiday(Base):
+    __tablename__ = 'holiday'
+    ID = Column(Integer, primary_key=True, unique=True, nullable=False)
+    HOLIDAY = Column(String)
+    START_DATE = Column(DateTime)
+    STOP_DATE = Column(DateTime)
+    TYPE = Column(String)
+    REGION = Column(String)
 
 def traffic_flow_import_20_22(input_path, siteRef_list, engine):
     """Import traffic flow data of 2020 to 2022
@@ -272,10 +283,10 @@ if __name__ == "__main__":
     meta_df["Station_ID"] = station_str
     meta_df = meta_df.reset_index(drop=True)
     meta_df.columns = meta_df.columns.str.upper()
-    meta_df.to_sql('weather_meta', con=engine, if_exists='replace', index=False)
+    #meta_df.to_sql('weather_meta', con=engine, if_exists='replace', index=False)
     
     # Weather
-    NCDC_weather_data_process(meta_df, "./result/weather/stations/", engine)
+    #NCDC_weather_data_process(meta_df, "./result/weather/stations/", engine)
     
     #############################################################################
     # Flow meta
@@ -289,10 +300,76 @@ if __name__ == "__main__":
     flow_meta_gdf = flow_meta_gdf[["SH", "RS", "RP", "siteRef", "lane", "type", "percentHea", "descriptio", "region", "siteType", "LAT", "LON"]]
     flow_meta_gdf = flow_meta_gdf.rename({"percentHea":"HEAVY_RATIO", "descriptio":"DESCRIPTION"}, axis=1)
     flow_meta_gdf.columns = flow_meta_gdf.columns.str.upper()
-    flow_meta_gdf.to_sql('flow_meta', con=engine, if_exists='replace', index=False)
+    #flow_meta_gdf.to_sql('flow_meta', con=engine, if_exists='replace', index=False)
     
     # Flow
     #siteRef_list = flow_meta_gdf["SITEREF"].to_list()
     #traffic_flow_database_upload(siteRef_list, engine)
+    #############################################################################
+    # Extreme weather
+    # https://hwe.niwa.co.nz/search/summary/Startdate/01-01-2013/Enddate/31-01-2022/Regions/all/Hazards/all/Impacts/all/Keywords/none/numberOfEvents/20/page/1#/
+    tree = ET.parse('./data/extreme_weather/extreme.xml')
+    root = tree.getroot()
+    print(root.tag)
+    
+    
+    #############################################################################
+    # Holiday
+    # https://www.employment.govt.nz/leave-and-holidays/public-holidays/previous-years-public-holidays-and-anniversary-dates#/
+    holiday_df = pd.read_excel("./data/holiday/holiday.xlsx")
+    holiday_df["Observed date"] = holiday_df["Observed date"].str.strip("*")
+    holiday_df["Observed date"] = holiday_df["Observed date"].str.strip(";")
+    holiday_df["Observed date"] = holiday_df["Observed date"].str.rstrip(" ")
+    
+    start_date_list = []
+    stop_date_list = []
+    for index, row in holiday_df.iterrows():
+        year = row["Year"]
+        
+        date = row["Observed date"].split(" or ")
+        if len(date) > 1:
+            start_date = date[0]
+            stop_date = date[1]
+            
+            start_date = start_date.split(" ")
+            start_month = start_date[-1]
+            start_day = start_date[1]
+
+            stop_date = stop_date.split(" ")
+            stop_month = stop_date[-1]
+            stop_day = stop_date[1]
+        else:
+            start_date = date[0]
+            start_date = start_date.split(" ")
+            start_month = start_date[-1]
+            start_day = start_date[1]
+            
+            stop_day = start_day
+            stop_month = start_month
+        
+        start_date_string = f"{start_month} {start_day}, {year}"
+        start_date_object = datetime.strptime(start_date_string, "%B %d, %Y")
+        start_date_list.append(start_date_object)
+
+        stop_date_string = f"{stop_month} {stop_day}, {year}"
+        stop_date_object = datetime.strptime(stop_date_string, "%B %d, %Y")
+        stop_date_list.append(stop_date_object)
+        
+    holiday_df["start_date"] = start_date_list
+    holiday_df["stop_date"] = stop_date_list
+    
+    def update_region_and_holiday(row):
+        if row['Type'] == 'Public holiday':
+            row['region'] = 'all'
+        else:
+            row['region'] = row['Holiday']
+            row['Holiday'] = 'Regional anniversary'
+        return row
+    
+    holiday_df = holiday_df.apply(update_region_and_holiday, axis=1)
+    holiday_df = holiday_df[["Holiday", "Type", "start_date", "stop_date", "region"]]
+    holiday_df.columns = holiday_df.columns.str.upper()
+    holiday_df.to_sql('holiday', con=engine, if_exists='replace', index=False)
+
     session.commit()
     session.close()

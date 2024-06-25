@@ -82,32 +82,89 @@ def traffic_flow_import_20_22(input_path, siteRef_list, engine):
     # Read all files within the folder
     traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
     for file in traffic_flow_list:
-        if "2021" in file:
-            print(file)
-            temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
-            # START_DATE SITE_ALIAS REGION_NAME SITE_REFERENCE CLASS_WEIGHT SITE_DESCRIPTION LANE_NUMBER FLOW_DIRECTION TRAFFIC_COUNT
-            temp_df["SITE_REFERENCE"] = temp_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
-            temp_df = temp_df[temp_df["SITE_REFERENCE"].isin(siteRef_list)]
-            temp_df = temp_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
-                                                    "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight", 
-                                                    "FLOW_DIRECTION":"Direction"})
-            temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
-            temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'])
-            temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
-            temp_df.columns = temp_df.columns.str.upper()
-            
-            temp_df_heavy = temp_df[temp_df["WEIGHT"] == "Heavy"]
-            temp_df_heavy.drop(["WEIGHT"], axis=1, inplace=True)
-            print(temp_df_heavy)
-            time.sleep(1000)
-            temp_df_light = temp_df[temp_df["WEIGHT"] == "Light"]
-            temp_df_light.drop(["WEIGHT"], axis=1, inplace=True)
-            
-            temp_df_heavy.to_sql('filtered_flow_heavy', con=engine, if_exists='append', index=False)
-            temp_df_light.to_sql('filtered_flow_light', con=engine, if_exists='append', index=False)
-            
-        else:
-            pass
+        print(file)
+        temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
+        # START_DATE SITE_ALIAS REGION_NAME SITE_REFERENCE CLASS_WEIGHT SITE_DESCRIPTION LANE_NUMBER FLOW_DIRECTION TRAFFIC_COUNT
+        temp_df["SITE_REFERENCE"] = temp_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
+        temp_df = temp_df[temp_df["SITE_REFERENCE"].isin(siteRef_list)]
+        temp_df = temp_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
+                                                "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight", 
+                                                "FLOW_DIRECTION":"Direction"})
+        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'])
+        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+        temp_df.columns = temp_df.columns.str.upper()
+        
+        table_name = file.strip(".xlsx")
+        table_class = type(
+        table_name,
+        (filtered_siteref_base,),
+        {'__tablename__': table_name, '__table_args__': {'extend_existing': True}}
+        )
+        Base.metadata.create_all(engine)
+        temp_df.to_sql(table_name, con=engine, if_exists='append', index=False)
+
+    return None
+
+def traffic_flow_import_13_20(input_path, siteRef_list, engine):
+    """Import traffic flow data of 2013 to 2020
+    https://opendata-nzta.opendata.arcgis.com/datasets/b719083bbb09489087649f1fc03ba53a/about
+
+    Args:
+        input_path (string): path of traffic flow between 2020 and 2022
+        siteRef_list (list): list contain strings of siteRef
+        engine (sqlalchemy_engine): engine used for database creation
+
+    Returns:
+        None
+    """
+
+    # Read all files within the folder
+    traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
+    for file in traffic_flow_list:
+        print(file)
+        temp_df = pd.read_csv(input_path + file)
+        # class siteRef startDatetime endDatetime direction count
+        temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
+        temp_df = temp_df[temp_df["siteRef"].isin(siteRef_list)]
+        temp_df = temp_df.rename(columns={"startDatetime":"Datetime", "count":"Flow", 
+                                          "class":"Weight", "direction":"Direction"})
+        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'], format='%d-%b-%Y %H:%M')
+        temp_df['Weight'] = temp_df['Weight'].replace('H', 'Heavy')
+        temp_df['Weight'] = temp_df['Weight'].replace('L', 'Light')
+        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+        temp_df.columns = temp_df.columns.str.upper()
+        
+        for siteref in siteRef_list:
+            table_name = siteref
+            table_class = type(
+            table_name,
+            (filtered_siteref_base,),
+            {'__tablename__': table_name, '__table_args__': {'extend_existing': True}}
+            )
+            Base.metadata.create_all(engine)
+            save_df = temp_df[temp_df["SITEREF"] == table_name]
+            save_df.to_sql(table_name, con=engine, if_exists='append', index=False)
+    
+    return None
+
+def traffic_flow_database_upload(siteRef_list, engine):
+    """Upload the flow data to database
+
+    Args:
+        siteRef_list (list): list contain strings of siteRef
+        engine (sqlalchemy_engine): engine used for database creation
+
+    Returns:
+        None
+    """
+    
+    # For year 13 to 20
+    traffic_df_13_20 = traffic_flow_import_13_20("./data/traffic/flow_data_13_20/", siteRef_list, engine)
+
+    # For year 20 to 21
+    traffic_df_20_21 = traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", siteRef_list, engine)
 
     return None
 
@@ -256,12 +313,17 @@ if __name__ == "__main__":
     
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-    traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", siteRef_list, process_engine)
-    flow_query = "SELECT * FROM filtered_flow_light"
-    flow_df = pd.read_sql(flow_query, process_engine)
-    flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
-    print(flow_df)
+    #traffic_flow_database_upload(siteRef_list, process_engine)
     
+    
+    
+    for siteRef in siteRef_list:
+        temp_table_name = siteRef
+        temp_query = "SELECT * FROM " + temp_table_name
+        temp_flow_df = pd.read_sql(temp_query, process_engine)
+        temp_flow_heavy_df = temp_flow_df[temp_flow_df["WEIGHT"] == "Heavy"]
+        temp_flow_light_df = temp_flow_df[temp_flow_df["WEIGHT"] == "Light"]
+
     
     """
     temp_flow_df = flow_df[["DATETIME", "SITEREF", "FLOW"]]
@@ -283,3 +345,11 @@ if __name__ == "__main__":
     filtered_meta_df = flow_missing_filter(flow_meta_df, merged_df, 30, process_engine)
     flow_data_imputation(filtered_meta_df, flow_df, process_engine)
     """
+    
+    # Light and Heavy
+    
+    
+    # Region
+    
+    
+    # Weekday
