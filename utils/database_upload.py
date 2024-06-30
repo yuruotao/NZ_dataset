@@ -310,9 +310,26 @@ if __name__ == "__main__":
     # https://hwe.niwa.co.nz/search/summary/Startdate/01-01-2013/Enddate/31-01-2022/Regions/all/Hazards/all/Impacts/all/Keywords/none/numberOfEvents/20/page/1#/
     tree = ET.parse('./data/extreme_weather/extreme.xml')
     root = tree.getroot()
-    print(root.tag)
     
-    
+    namespaces = {
+    'exist': 'http://exist.sourceforge.net/NS/exist',
+    'hwe': 'http://hwe.niwa.co.nz/schema/2011',
+    'gml': 'http://www.opengis.net/gml',
+    'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+}
+
+    # Find all WeatherEvent elements
+    weather_events = root.findall('.//hwe:WeatherEvent', namespaces)
+    for event in weather_events:
+        identifier = event.find('hwe:Identifier', namespaces).text
+        title = event.find('hwe:Title', namespaces).text
+        start_date = event.find('hwe:StartDate', namespaces).text
+        abstract = event.find('hwe:Abstract', namespaces).text
+        print(f'Identifier: {identifier}')
+        print(f'Title: {title}')
+        print(f'Start Date: {start_date}')
+        print(f'Abstract: {abstract}')
+
     #############################################################################
     # Holiday
     # https://www.employment.govt.nz/leave-and-holidays/public-holidays/previous-years-public-holidays-and-anniversary-dates#/
