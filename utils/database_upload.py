@@ -17,6 +17,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import xml.etree.ElementTree as ET
+import re
 
 Base = declarative_base()
 
@@ -83,7 +84,6 @@ class flow(Base):
     WEIGHT = Column(String)
     DIRECTION = Column(Integer)
 
-
 class holiday(Base):
     __tablename__ = 'holiday'
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
@@ -92,7 +92,18 @@ class holiday(Base):
     STOP_DATE = Column(DateTime)
     TYPE = Column(String)
     REGION = Column(String)
-
+    
+class extreme_weather(Base):
+    __tablename__ = 'extreme_weather'
+    HAZARD = Column(String)
+    IDENTIFIER = Column(String, primary_key=True, unique=True, nullable=False)
+    ABSTRACT = Column(String)
+    START_DATE = Column(DateTime)
+    REGION = Column(String)
+    LATITUDE = Column(Float)
+    LONGITUDE = Column(Float)
+    IMPACT = Column(String)
+    
 def traffic_flow_import_20_22(input_path, siteRef_list, engine):
     """Import traffic flow data of 2020 to 2022
     https://opendata-nzta.opendata.arcgis.com/datasets/tms-traffic-quarter-hourly-oct-2020-to-jan-2022/about
@@ -308,27 +319,85 @@ if __name__ == "__main__":
     #############################################################################
     # Extreme weather
     # https://hwe.niwa.co.nz/search/summary/Startdate/01-01-2013/Enddate/31-01-2022/Regions/all/Hazards/all/Impacts/all/Keywords/none/numberOfEvents/20/page/1#/
-    tree = ET.parse('./data/extreme_weather/extreme.xml')
-    root = tree.getroot()
-    
     namespaces = {
     'exist': 'http://exist.sourceforge.net/NS/exist',
     'hwe': 'http://hwe.niwa.co.nz/schema/2011',
     'gml': 'http://www.opengis.net/gml',
     'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
-}
-
-    # Find all WeatherEvent elements
-    weather_events = root.findall('.//hwe:WeatherEvent', namespaces)
+    }
+    
+    tree = ET.parse('./data/extreme_weather/extreme.xml')
+    root = tree.getroot()
+    # Use relative XPath to find all WeatherEvent elements
+    temp_weather_events = root.findall('.//hwe:WeatherEvent', namespaces)
+    
+    tree_2 = ET.parse('./data/extreme_weather/extreme2.xml')
+    root_2 = tree_2.getroot()
+    weather_events = root_2.findall('.//hwe:WeatherEvent', namespaces)
+    
+    weather_events = weather_events + temp_weather_events
+    
+    extreme_weather_df = pd.DataFrame()
+    HAZARD_list = []
+    IDENTIFIER_list = []
+    ABSTRACT_list = []
+    START_DATE_list = []
+    REGION_list = []
+    LATITUDE_list = []
+    LONGITUDE_list = []
+    IMPACT_list = []
     for event in weather_events:
         identifier = event.find('hwe:Identifier', namespaces).text
-        title = event.find('hwe:Title', namespaces).text
         start_date = event.find('hwe:StartDate', namespaces).text
         abstract = event.find('hwe:Abstract', namespaces).text
-        print(f'Identifier: {identifier}')
-        print(f'Title: {title}')
-        print(f'Start Date: {start_date}')
-        print(f'Abstract: {abstract}')
+        
+        regions_list = event.findall('hwe:Regions/hwe:Region', namespaces)
+        for region_element in regions_list:
+            hazards_list = region_element.findall('hwe:Hazards/hwe:Hazard', namespaces)
+            for hazard_element in hazards_list:
+                hazard = hazard_element.attrib.get("type")
+                small_region_element = hazard_element.find('hwe:Location', namespaces)
+                region = small_region_element.attrib.get("name")
+                lat_lon = small_region_element.find("gml:Point/gml:pos", namespaces)
+                if lat_lon == None:
+                    lat = None
+                    lon = None
+                else:
+                    pattern = r'\d+\.\d+'
+                    # Find all numbers in the string
+                    numbers = re.findall(pattern, lat_lon.text)
+                    # Convert the found numbers from strings to integers
+                    lon, lat = map(float, numbers)
+                
+                impact = ""
+                impact_element_list = hazard_element.findall('hwe:Impacts/hwe:Impact', namespaces)
+                for impact_element in impact_element_list:
+                    temp_impact = impact_element.text.lstrip(" ").strip("\n").strip("\t")
+                    if temp_impact[-1] != ".":
+                        temp_impact = temp_impact + "."
+                    temp_impact = re.sub(r'\.(?!\s)', '. ', temp_impact)
+                    temp_impact = re.sub(r'\s+', ' ', temp_impact)
+                    temp_impact = temp_impact.strip()
+                    impact = impact + temp_impact
+                
+                HAZARD_list.append(hazard)
+                IDENTIFIER_list.append(identifier)
+                ABSTRACT_list.append(abstract)
+                START_DATE_list.append(start_date)
+                REGION_list.append(region)
+                LATITUDE_list.append(lat)
+                LONGITUDE_list.append(lon)
+                IMPACT_list.append(impact)
+
+    extreme_weather_df["HAZARD"] = HAZARD_list
+    extreme_weather_df["IDENTIFIER"] = IDENTIFIER_list
+    extreme_weather_df["ABSTRACT"] = ABSTRACT_list
+    extreme_weather_df["START_DATE"] = START_DATE_list
+    extreme_weather_df["REGION"] = REGION_list
+    extreme_weather_df["LATITUDE"] = LATITUDE_list
+    extreme_weather_df["LONGITUDE"] = LONGITUDE_list
+    extreme_weather_df["IMPACT"] = IMPACT_list
+    extreme_weather_df.to_sql('extreme_weather', con=engine, if_exists='replace', index=False)
 
     #############################################################################
     # Holiday
