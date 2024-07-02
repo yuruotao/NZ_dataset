@@ -5,6 +5,7 @@ import numpy as np
 import os
 import time
 import matplotlib.pyplot as plt
+import matplotlib
 import requests
 from os import listdir
 from os.path import isfile, join
@@ -57,7 +58,7 @@ class basic_statistics_sql_class(Base):
     PERCENTILE_100 = Column(Float)
 
 class filtered_siteref_base(Base):
-    __abstract__ = True
+    __tablename__ = 'filtered_flow'
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
     SITEREF = Column(String)
     DATETIME = Column(DateTime)
@@ -65,13 +66,13 @@ class filtered_siteref_base(Base):
     WEIGHT = Column(String)
     DIRECTION = Column(Integer)
 
-def traffic_flow_import_20_22(input_path, siteRef_list, engine):
-    """Import traffic flow data of 2020 to 2022
+def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
+    """Import traffic flow data of 2019
     https://opendata-nzta.opendata.arcgis.com/datasets/tms-traffic-quarter-hourly-oct-2020-to-jan-2022/about
     https://opendata-nzta.opendata.arcgis.com/datasets/b90f8908910f44a493c6501c3565ed2d_0
 
     Args:
-        input_path (string): path of traffic flow between 2020 and 2022
+        input_path (string): path of traffic flow between 2019
         siteRef_list (list): list contain strings of siteRef
         engine (sqlalchemy_engine): engine used for database creation
 
@@ -81,91 +82,125 @@ def traffic_flow_import_20_22(input_path, siteRef_list, engine):
 
     # Read all files within the folder
     traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
+    df = pd.DataFrame()
     for file in traffic_flow_list:
         print(file)
-        temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
-        # START_DATE SITE_ALIAS REGION_NAME SITE_REFERENCE CLASS_WEIGHT SITE_DESCRIPTION LANE_NUMBER FLOW_DIRECTION TRAFFIC_COUNT
-        temp_df["SITE_REFERENCE"] = temp_df["SITE_REFERENCE"].apply(lambda x: str(x).zfill(8))
-        temp_df = temp_df[temp_df["SITE_REFERENCE"].isin(siteRef_list)]
-        temp_df = temp_df.rename(columns={"START_DATE":"Datetime", "TRAFFIC_COUNT":"Flow", 
-                                                "SITE_REFERENCE":"siteRef", "CLASS_WEIGHT":"Weight", 
-                                                "FLOW_DIRECTION":"Direction"})
-        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
-        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'])
-        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
-        temp_df.columns = temp_df.columns.str.upper()
-        
-        table_name = file.strip(".xlsx")
-        table_class = type(
-        table_name,
-        (filtered_siteref_base,),
-        {'__tablename__': table_name, '__table_args__': {'extend_existing': True}}
-        )
-        Base.metadata.create_all(engine)
-        temp_df.to_sql(table_name, con=engine, if_exists='append', index=False)
+        if "2019" in file:
+            temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
+            # class siteRef startDatetime endDatetime direction count
+            temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
+            temp_df = temp_df[temp_df["siteRef"].isin(siteRef_list)]
+            temp_df = temp_df.rename(columns={"startDatetime":"Datetime", "count":"Flow", 
+                                            "class":"Weight", "direction":"Direction"})
+            temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
+            temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'], format='%d-%b-%Y %H:%M')
+            temp_df['Weight'] = temp_df['Weight'].replace('H', 'Heavy')
+            temp_df['Weight'] = temp_df['Weight'].replace('L', 'Light')
+            temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
+            temp_df.columns = temp_df.columns.str.upper()
+            
+            if commit_flag:
+                temp_df.to_sql("filtered_flow", con=engine, if_exists='append', index=False)
+            
+            df = pd.concat([df, temp_df], axis=0)
+            
+    return df
 
-    return None
-
-def traffic_flow_import_13_20(input_path, siteRef_list, engine):
-    """Import traffic flow data of 2013 to 2020
-    https://opendata-nzta.opendata.arcgis.com/datasets/b719083bbb09489087649f1fc03ba53a/about
-
-    Args:
-        input_path (string): path of traffic flow between 2020 and 2022
-        siteRef_list (list): list contain strings of siteRef
-        engine (sqlalchemy_engine): engine used for database creation
-
-    Returns:
-        None
-    """
-
-    # Read all files within the folder
-    traffic_flow_list = [f for f in listdir(input_path) if isfile(join(input_path, f))]
-    for file in traffic_flow_list:
-        print(file)
-        temp_df = pd.read_csv(input_path + file)
-        # class siteRef startDatetime endDatetime direction count
-        temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
-        temp_df = temp_df[temp_df["siteRef"].isin(siteRef_list)]
-        temp_df = temp_df.rename(columns={"startDatetime":"Datetime", "count":"Flow", 
-                                          "class":"Weight", "direction":"Direction"})
-        temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
-        temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'], format='%d-%b-%Y %H:%M')
-        temp_df['Weight'] = temp_df['Weight'].replace('H', 'Heavy')
-        temp_df['Weight'] = temp_df['Weight'].replace('L', 'Light')
-        temp_df = temp_df.groupby(["Datetime", "siteRef", "Weight", "Direction"], as_index=False)[["Flow",]].sum().reset_index(drop=True)
-        temp_df.columns = temp_df.columns.str.upper()
-        
-        for siteref in siteRef_list:
-            table_name = siteref
-            table_class = type(
-            table_name,
-            (filtered_siteref_base,),
-            {'__tablename__': table_name, '__table_args__': {'extend_existing': True}}
-            )
-            Base.metadata.create_all(engine)
-            save_df = temp_df[temp_df["SITEREF"] == table_name]
-            save_df.to_sql(table_name, con=engine, if_exists='append', index=False)
+def lineplot_breaknans(data, break_at_nan=True, break_at_inf=True, **kwargs):
+    '''sns.lineplot by default doesn't break the line at nans or infs, 
+        which can lead to misleading plots.
+    See https://github.com/mwaskom/seaborn/issues/1552 
+        and https://stackoverflow.com/questions/52098537/avoid-plotting-missing-values-on-a-line-plot
     
-    return None
-
-def traffic_flow_database_upload(siteRef_list, engine):
-    """Upload the flow data to database
-
-    Args:
-        siteRef_list (list): list contain strings of siteRef
-        engine (sqlalchemy_engine): engine used for database creation
-
-    Returns:
-        None
-    """
+    This function rectifies this, and allows the user to specify 
+        if it should break the line at nans, infs, or at both (default).
     
-    # For year 13 to 20
-    traffic_df_13_20 = traffic_flow_import_13_20("./data/traffic/flow_data_13_20/", siteRef_list, engine)
+    Note: using this function means you can't use the `units` argument of sns.lineplot.'''
 
-    # For year 20 to 21
-    traffic_df_20_21 = traffic_flow_import_20_22("./data/traffic/flow_data_20_22/", siteRef_list, engine)
+    cum_num_nans_infs = np.zeros(len(data))
+    if break_at_nan: cum_num_nans_infs += np.cumsum(np.isnan(data[kwargs['y']]))
+    if break_at_inf: cum_num_nans_infs += np.cumsum(np.isinf(data[kwargs['y']]))
+    sns.lineplot(data, **kwargs, units=cum_num_nans_infs, 
+            estimator=None)  #estimator must be None when specifying units
 
+def direction_plot(siteRef_list, flow_df, output_path):
+    
+    
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+        
+    flow_df = flow_df.astype({"DIRECTION":int})
+        
+    time_index = pd.date_range(start="2021-01-01 00:00:00", end="2021-12-31 23:45:00", freq="15min")
+    datetime_df = pd.DataFrame()
+    datetime_df["DATETIME"] = time_index
+        
+    for siteRef in siteRef_list:
+        temp_flow_df = flow_df[flow_df["SITEREF"] == siteRef]
+        dir_set = set(temp_flow_df["DIRECTION"].to_list())
+        if len(dir_set) >= 2:
+            print("Direction number:", len(dir_set))
+        
+            temp_merged_df = datetime_df
+            for direction in dir_set:
+                temp_dir_df = temp_flow_df[temp_flow_df["DIRECTION"] == direction]
+                temp_dir_df = temp_dir_df[["DATETIME", "FLOW"]]
+                temp_merged_df = temp_merged_df.merge(temp_dir_df, on='DATETIME', how='left')
+                temp_merged_df = temp_merged_df.fillna(value=np.nan)
+                temp_merged_df.replace(to_replace=[None], value=np.nan, inplace=True)
+                temp_merged_df = temp_merged_df.rename({"FLOW":str(direction)}, axis=1)
+
+            temp_merged_df = temp_merged_df.reset_index(drop=True)
+            print(temp_merged_df)
+            
+            color_list = ["#669bbc", "#003049", "#780000", "#0466c8", "#d90429",  "#0353a4" ]
+
+            column_names = list(temp_merged_df.columns)
+            column_names.remove('DATETIME')
+            subplot_num = len(dir_set)
+            
+            matplotlib.rc('xtick', labelsize=22)
+            matplotlib.rc('ytick', labelsize=22)
+            plt.rc('legend', fontsize=22)
+            
+            done = False
+            while not done:
+                try:
+                    fig, axes = plt.subplots(subplot_num, 1, figsize=(16, 12))
+                    done = True
+                except ValueError:
+                    continue
+
+            for iter in range(subplot_num):
+                lineplot_breaknans(data=temp_merged_df, x='DATETIME', y=column_names[iter], ax=axes[iter], color=color_list[iter], break_at_nan=True, break_at_inf=True)
+                axes[iter].set_title("Direction " + column_names[iter], fontsize=22)
+
+                n = 1500  # Set the desired frequency of ticks
+                ticks_list = list(temp_merged_df["DATETIME"])
+                ticks = ticks_list[::n]
+                axes[iter].set_xticks(ticks)
+                axes[iter].set(xlabel="", ylabel="")
+                axes[iter].set_xlim(temp_merged_df.DATETIME.min(), temp_merged_df.DATETIME.max())
+                axes[iter].set_ylim(bottom=0)
+                    
+            # Hide xticks for all subplots except the bottom one
+            for ax in axes[:-1]:
+                ax.xaxis.set_tick_params(which='both', bottom=False, top=False, labelbottom=False)
+
+            # Display xticks only at the bottom subplot
+            axes[-1].xaxis.set_ticks_position('both')  # Display ticks on both sides
+            axes[-1].xaxis.set_tick_params(which='both', bottom=True, top=False)  # Only bottom ticks are visible
+            
+            # Rotate the x-tick labels for better readability
+            plt.xticks(rotation=45)
+
+            # Adjust layout
+            plt.tight_layout()
+            # Show the plot
+            plt.savefig(output_path + siteRef + ".png", dpi=600)
+            plt.close()
+        
+    
     return None
 
 def flow_missing_data_visualization(input_df, output_path):
@@ -313,18 +348,18 @@ if __name__ == "__main__":
     
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-    #traffic_flow_database_upload(siteRef_list, process_engine)
-    
-    
-    
-    for siteRef in siteRef_list:
-        temp_table_name = siteRef
-        temp_query = "SELECT * FROM " + temp_table_name
-        temp_flow_df = pd.read_sql(temp_query, process_engine)
-        temp_flow_heavy_df = temp_flow_df[temp_flow_df["WEIGHT"] == "Heavy"]
-        temp_flow_light_df = temp_flow_df[temp_flow_df["WEIGHT"] == "Light"]
+    flow_df = traffic_flow_import_19("./data/traffic/flow_data_20_22/", siteRef_list, process_engine, False)
 
+    "Datetime", "siteRef", "Weight", "Direction"
     
+    
+    # Plot the comparison between directions for each station
+    #direction_plot(siteRef_list, heavy_flow_df, "./result/traffic/direction/heavy/")
+    #direction_plot(siteRef_list, light_flow_df, "./result/traffic/direction/light/")
+    
+    
+        
+
     """
     temp_flow_df = flow_df[["DATETIME", "SITEREF", "FLOW"]]
     
