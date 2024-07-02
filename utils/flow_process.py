@@ -348,9 +348,8 @@ if __name__ == "__main__":
     
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-    flow_df = traffic_flow_import_19("./data/traffic/flow_data_20_22/", siteRef_list, process_engine, False)
-
-    "Datetime", "siteRef", "Weight", "Direction"
+    flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, True)
+    
     
     
     # Plot the comparison between directions for each station

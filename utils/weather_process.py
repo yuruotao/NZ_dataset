@@ -230,8 +230,19 @@ if __name__ == "__main__":
     Session = sessionmaker(bind=process_engine)
     session = Session()
     
-    filtered_meta_df = weather_missing_filter(weather_meta_df, merged_df, 30, process_engine)
-    NCDC_weather_data_imputation(filtered_meta_df, weather_df, process_engine)
+    #filtered_meta_df = weather_missing_filter(weather_meta_df, merged_df, 30, process_engine)
+    #NCDC_weather_data_imputation(filtered_meta_df, weather_df, process_engine)
     
-    session.commit()
-    session.close()
+    # Output a dataframe of basic statistics
+    basic_statistics_weather_query = 'SELECT * FROM basic_statistics_weather'
+    basic_statistics_weather_df = pd.read_sql(basic_statistics_weather_query, process_engine)
+    basic_statistics_weather_df = basic_statistics_weather_df[basic_statistics_weather_df["INDEX"] == "93004099999"]
+    basic_statistics_weather_df = basic_statistics_weather_df[~basic_statistics_weather_df["INDICATOR"].isin(["VISIB", "GUST", "SNDP"])]
+    basic_statistics_weather_df = basic_statistics_weather_df.round(2)
+    basic_statistics_weather_df.to_excel("./result/weather/basic_statistics.xlsx", index=False)
+    
+    #session.commit()
+    #session.close()
+    
+    
+    
