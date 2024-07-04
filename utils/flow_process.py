@@ -62,9 +62,8 @@ class filtered_siteref_base(Base):
     ID = Column(Integer, primary_key=True, unique=True, nullable=False)
     SITEREF = Column(String)
     DATETIME = Column(DateTime)
-    FLOW = Column(Float)
-    WEIGHT = Column(String)
-    DIRECTION = Column(Integer)
+    TOTAL_FLOW = Column(Float)
+    PROPORTION = Column(Float)
 
 def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
     """Import traffic flow data of 2019
@@ -117,92 +116,27 @@ def lineplot_breaknans(data, break_at_nan=True, break_at_inf=True, **kwargs):
         if it should break the line at nans, infs, or at both (default).
     
     Note: using this function means you can't use the `units` argument of sns.lineplot.'''
-
-    cum_num_nans_infs = np.zeros(len(data))
-    if break_at_nan: cum_num_nans_infs += np.cumsum(np.isnan(data[kwargs['y']]))
-    if break_at_inf: cum_num_nans_infs += np.cumsum(np.isinf(data[kwargs['y']]))
-    sns.lineplot(data, **kwargs, units=cum_num_nans_infs, 
-            estimator=None)  #estimator must be None when specifying units
-
-def direction_plot(siteRef_list, flow_df, output_path):
     
+    # Automatically detect the y column and use index as x
+    if 'y' not in kwargs:
+        columns = data.columns
+        if len(columns) >= 1:
+            kwargs['y'] = columns[0]
+        else:
+            raise ValueError("DataFrame must contain at least one column for y detection.")
     
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-        
-    flow_df = flow_df.astype({"DIRECTION":int})
-        
-    time_index = pd.date_range(start="2021-01-01 00:00:00", end="2021-12-31 23:45:00", freq="15min")
-    datetime_df = pd.DataFrame()
-    datetime_df["DATETIME"] = time_index
-        
-    for siteRef in siteRef_list:
-        temp_flow_df = flow_df[flow_df["SITEREF"] == siteRef]
-        dir_set = set(temp_flow_df["DIRECTION"].to_list())
-        if len(dir_set) >= 2:
-            print("Direction number:", len(dir_set))
-        
-            temp_merged_df = datetime_df
-            for direction in dir_set:
-                temp_dir_df = temp_flow_df[temp_flow_df["DIRECTION"] == direction]
-                temp_dir_df = temp_dir_df[["DATETIME", "FLOW"]]
-                temp_merged_df = temp_merged_df.merge(temp_dir_df, on='DATETIME', how='left')
-                temp_merged_df = temp_merged_df.fillna(value=np.nan)
-                temp_merged_df.replace(to_replace=[None], value=np.nan, inplace=True)
-                temp_merged_df = temp_merged_df.rename({"FLOW":str(direction)}, axis=1)
+    # Reset index to have a column for the x-axis
+    data_reset = data.reset_index()
+    kwargs['x'] = data_reset.columns[0]
 
-            temp_merged_df = temp_merged_df.reset_index(drop=True)
-            print(temp_merged_df)
-            
-            color_list = ["#669bbc", "#003049", "#780000", "#0466c8", "#d90429",  "#0353a4" ]
+    # Create a cumulative sum of NaNs and infs to use as units
+    cum_num_nans_infs = np.zeros(len(data_reset))
+    if break_at_nan: cum_num_nans_infs += np.cumsum(np.isnan(data_reset[kwargs['y']]))
+    if break_at_inf: cum_num_nans_infs += np.cumsum(np.isinf(data_reset[kwargs['y']]))
 
-            column_names = list(temp_merged_df.columns)
-            column_names.remove('DATETIME')
-            subplot_num = len(dir_set)
-            
-            matplotlib.rc('xtick', labelsize=22)
-            matplotlib.rc('ytick', labelsize=22)
-            plt.rc('legend', fontsize=22)
-            
-            done = False
-            while not done:
-                try:
-                    fig, axes = plt.subplots(subplot_num, 1, figsize=(16, 12))
-                    done = True
-                except ValueError:
-                    continue
-
-            for iter in range(subplot_num):
-                lineplot_breaknans(data=temp_merged_df, x='DATETIME', y=column_names[iter], ax=axes[iter], color=color_list[iter], break_at_nan=True, break_at_inf=True)
-                axes[iter].set_title("Direction " + column_names[iter], fontsize=22)
-
-                n = 1500  # Set the desired frequency of ticks
-                ticks_list = list(temp_merged_df["DATETIME"])
-                ticks = ticks_list[::n]
-                axes[iter].set_xticks(ticks)
-                axes[iter].set(xlabel="", ylabel="")
-                axes[iter].set_xlim(temp_merged_df.DATETIME.min(), temp_merged_df.DATETIME.max())
-                axes[iter].set_ylim(bottom=0)
-                    
-            # Hide xticks for all subplots except the bottom one
-            for ax in axes[:-1]:
-                ax.xaxis.set_tick_params(which='both', bottom=False, top=False, labelbottom=False)
-
-            # Display xticks only at the bottom subplot
-            axes[-1].xaxis.set_ticks_position('both')  # Display ticks on both sides
-            axes[-1].xaxis.set_tick_params(which='both', bottom=True, top=False)  # Only bottom ticks are visible
-            
-            # Rotate the x-tick labels for better readability
-            plt.xticks(rotation=45)
-
-            # Adjust layout
-            plt.tight_layout()
-            # Show the plot
-            plt.savefig(output_path + siteRef + ".png", dpi=600)
-            plt.close()
-        
-    
-    return None
+    # Plot using seaborn's lineplot
+    ax = sns.lineplot(data=data_reset, **kwargs, units=cum_num_nans_infs, estimator=None)  # estimator must be None when specifying units
+    return ax
 
 def flow_missing_data_visualization(input_df, output_path):
     """Visualize the missing data of flow data
@@ -282,16 +216,7 @@ def flow_missing_filter(meta_df, merged_df, threshold, engine):
     return filtered_meta_df
 
 def flow_data_imputation(filtered_meta_df, merged_df, engine):
-    """Reformat and impute the missing data of weather data
-    Add relative humidity "RH" to the dataframe
 
-    Args:
-        data_path (string): path to station data
-        output_path (string): path to store the imputed data
-
-    Returns:
-        None
-    """
 
     siteref_list = filtered_meta_df["SITEREF"].to_list()
     
@@ -299,13 +224,12 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine):
         print(siteref)
         temp_df = merged_df[merged_df["SITEREF"] == siteref]
         datetime_column = temp_df["DATETIME"]
-        siteref_column = temp_df["SITEREF"]
-        temp_df = temp_df.drop(columns=["DATETIME", "ID", "SITEREF"])
+        temp_df = temp_df.drop(columns=["DATETIME", "SITEREF", "WEIGHT", "FLOW"])
         basic_statistics_df = basic_statistics(temp_df)
         basic_statistics_df["INDEX"] = str(siteref)
 
-        forward_df = temp_df.shift(-1)
-        backward_df = temp_df.shift(1)
+        forward_df = temp_df.shift(-24*4)
+        backward_df = temp_df.shift(24*4)
         average_values = (forward_df + backward_df) / 2
         
         temp_df = temp_df.copy()
@@ -322,12 +246,190 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine):
             temp_df[column].fillna(mean_value, inplace=True)
 
         temp_df = temp_df.reset_index()
-        temp_df["SITEREF"] = siteref_column
-        
+        temp_df["SITEREF"] = siteref
+
         temp_df.to_sql('filtered_flow', con=engine, if_exists='append', index=False)
         basic_statistics_df.to_sql('basic_statistics_flow', con=engine, if_exists='append', index=False)
 
     return None
+
+def imputation(input_df, imputation_method, save_path):
+    """carry out the imputation for raw data with missing values
+
+    Args:
+        input_df (dataframe): the dataframe containing raw data
+        imputation_method (string): specify the method of imputation
+        save_path (string): specify the folder to save the imputed data
+
+    Returns:
+        dataframe: dataframe containing the imputed data
+    """
+    
+    print("Imputation begin")
+    datetime_column = input_df["DATETIME"]
+    input_df = input_df.drop(columns=["DATETIME"])
+    
+    imputation_dir = save_path + "/"
+    
+    if not os.path.exists(imputation_dir):
+        os.makedirs(imputation_dir)
+        
+    if imputation_method == "Linear":
+        imputed_df = input_df.interpolate(method='linear')
+
+    elif imputation_method == "Forward-Backward":
+        forward_df = input_df.shift(-4*24)
+        backward_df = input_df.shift(4*24)
+        
+        average_values = (forward_df + backward_df) / 2
+        temp_df = input_df.copy()
+        temp_df[temp_df.isna() & forward_df.notna() & backward_df.notna()] = average_values[temp_df.isna() & forward_df.notna() & backward_df.notna()]
+        temp_df[temp_df.isna() & forward_df.notna() & backward_df.isna()] = forward_df[temp_df.isna() & forward_df.notna() & backward_df.isna()]
+        temp_df[temp_df.isna() & backward_df.notna() & forward_df.isna()] = backward_df[temp_df.isna() & backward_df.notna() & forward_df.isna()]
+
+        temp_df = pd.concat([datetime_column, temp_df], axis=1)
+        temp_df.set_index('DATETIME', inplace=True)
+        # Set Datetime column as index
+
+        for column in temp_df.columns:
+            print(column)
+            # Create a new DataFrame with day of the week and time of day as columns
+            df_grouped = temp_df[column].reset_index()
+            df_grouped['dayofweek'] = df_grouped['DATETIME'].dt.dayofweek
+            df_grouped['time'] = df_grouped['DATETIME'].dt.time
+            # Group by day of the week and time of day, then calculate the mean
+            mean_values = df_grouped.groupby(['dayofweek', 'time'])[column].mean().reset_index()
+            
+            # Function to fill missing values in a column based on datetime index
+            def fill_missing_values(index_value, column, mean_values):
+                if pd.isnull(temp_df.loc[index_value, column]):
+                    # Find the corresponding mean value based on datetime index
+                    mean_value = mean_values.loc[(mean_values['dayofweek'] == index_value.dayofweek) & (mean_values['time'] == index_value.time()), column].values[0]
+                    return mean_value
+                else:
+                    return temp_df.loc[index_value, column]
+            temp_df[column] = temp_df.apply(lambda row: fill_missing_values(row.name, column, mean_values), axis=1)
+
+        imputed_df = temp_df.reset_index(drop=True)
+
+    elif imputation_method == "Forward":
+        imputed_df = input_df.fillna(input_df.shift(-4*24))
+        temp_df = imputed_df
+        
+        temp_df = pd.concat([datetime_column, temp_df], axis=1)
+        temp_df.set_index('DATETIME', inplace=True)
+        # Set Datetime column as index
+
+        for column in temp_df.columns:
+            print(column)
+            # Create a new DataFrame with day of the week and time of day as columns
+            df_grouped = temp_df[column].reset_index()
+            df_grouped['dayofweek'] = df_grouped['DATETIME'].dt.dayofweek
+            df_grouped['time'] = df_grouped['DATETIME'].dt.time
+            # Group by day of the week and time of day, then calculate the mean
+            mean_values = df_grouped.groupby(['dayofweek', 'time'])[column].mean().reset_index()
+            
+            # Function to fill missing values in a column based on datetime index
+            def fill_missing_values(index_value, column, mean_values):
+                if pd.isnull(temp_df.loc[index_value, column]):
+                    # Find the corresponding mean value based on datetime index
+                    mean_value = mean_values.loc[(mean_values['dayofweek'] == index_value.dayofweek) & (mean_values['time'] == index_value.time()), column].values[0]
+                    return mean_value
+                else:
+                    return temp_df.loc[index_value, column]
+            temp_df[column] = temp_df.apply(lambda row: fill_missing_values(row.name, column, mean_values), axis=1)
+
+        imputed_df = temp_df.reset_index(drop=True)
+        
+    elif imputation_method == "Backward":
+        imputed_df = input_df.fillna(input_df.shift(4*24))
+        temp_df = imputed_df
+        temp_df = pd.concat([datetime_column, temp_df], axis=1)
+        temp_df.set_index('DATETIME', inplace=True)
+        # Set Datetime column as index
+
+        for column in temp_df.columns:
+            print(column)
+            # Create a new DataFrame with day of the week and time of day as columns
+            df_grouped = temp_df[column].reset_index()
+            df_grouped['dayofweek'] = df_grouped['DATETIME'].dt.dayofweek
+            df_grouped['time'] = df_grouped['DATETIME'].dt.time
+            # Group by day of the week and time of day, then calculate the mean
+            mean_values = df_grouped.groupby(['dayofweek', 'time'])[column].mean().reset_index()
+            
+            # Function to fill missing values in a column based on datetime index
+            def fill_missing_values(index_value, column, mean_values):
+                if pd.isnull(temp_df.loc[index_value, column]):
+                    # Find the corresponding mean value based on datetime index
+                    mean_value = mean_values.loc[(mean_values['dayofweek'] == index_value.dayofweek) & (mean_values['time'] == index_value.time()), column].values[0]
+                    return mean_value
+                else:
+                    return temp_df.loc[index_value, column]
+            temp_df[column] = temp_df.apply(lambda row: fill_missing_values(row.name, column, mean_values), axis=1)
+
+        imputed_df = temp_df.reset_index(drop=True)
+    
+
+    imputed_df = pd.concat([datetime_column, imputed_df], axis=1)
+    imputed_df.to_excel(imputation_dir + "/" + "imputed_data_" + imputation_method + ".xlsx", index=False)
+    
+    return imputed_df
+
+def imputation_visualization(raw_data_df, start_time, end_time, method_list, column, output_path):
+
+    sns.set_theme(style="whitegrid")
+    sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
+    
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    
+    raw_data_df = raw_data_df[["DATETIME", column]]
+    raw_data_df = raw_data_df.loc[(raw_data_df['DATETIME'] >= start_time) & (raw_data_df['DATETIME'] <= end_time)]
+    raw_data_df = raw_data_df.rename(columns={column:"Raw"})
+    raw_data_df = raw_data_df.fillna(value=np.nan)
+    raw_data_df.replace(to_replace=[None], value=np.nan, inplace=True)
+    
+    time_index = pd.date_range(start=start_time, end=end_time, freq="h")
+    # Create a DataFrame with the time series column
+    time_series_df = pd.DataFrame({'DATETIME': time_index})
+    for method in method_list:
+        temp_df = pd.read_excel("./result/flow/imputation/imputed_data_" + method +".xlsx")
+        temp_df = temp_df[["DATETIME", column]]
+        temp_df = temp_df.loc[(temp_df['DATETIME'] >= start_time) & (temp_df['DATETIME'] <= end_time)]
+        temp_df = temp_df.rename(columns={column:method})
+        time_series_df = pd.merge(time_series_df, temp_df, on='DATETIME', how="left")
+        
+    time_series_df = pd.merge(time_series_df, raw_data_df, on='DATETIME', how="left")
+    time_series_df = time_series_df.set_index("DATETIME")
+    
+    plt.figure(figsize=(20, 12))
+    ax = lineplot_breaknans(data=time_series_df, y="Raw", markers=True, linewidth=3, break_at_nan=True)
+    temp_time_series_df = time_series_df.drop(["Raw"], axis=1, inplace=False)
+    sns.lineplot(data=temp_time_series_df, ax=ax, markers=True, linewidth=3)
+    missing_mask = time_series_df['Raw'].isna().values.astype(int)
+    ax.set_xlim(time_series_df.index[0], time_series_df.index[-1])
+    ax.pcolorfast(ax.get_xlim(), ax.get_ylim(),
+                  missing_mask[np.newaxis], cmap='Blues', alpha=0.2)
+    
+    plt.rc('legend', fontsize=22)
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0 + box.height * 0.1,
+                 box.width, box.height * 0.9])
+
+    # Put a legend below current axis
+    ax.legend(loc='lower left', mode="expand", bbox_to_anchor=(0, 1.02, 1, 0.2), ncol=5)
+    
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+    ax.tick_params(labelsize=22)
+    plt.xlabel("Time", fontsize=22)
+    plt.ylabel("Traffic Flow", fontsize=22)
+        
+    #plt.tight_layout()
+    plt.savefig(output_path + "imputation_methods.png", dpi=600)
+    plt.close()
+    
+    return None
+
 
 if __name__ == "__main__":
     process_db_address = 'sqlite:///./data/NZDB_flow_process.db'
@@ -339,19 +441,18 @@ if __name__ == "__main__":
     
     flow_meta_query = 'SELECT * FROM flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, engine)
-    flow_meta_df.to_sql('filtered_flow_meta', con=process_engine, if_exists='replace', index=False)
 
     # If RAM is huge, select from the established database
     #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
     #flow_df = pd.read_sql(flow_query, engine)
     #flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
-    #print(flow_df)
     
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
-    
+    ####################################################################################################
+    # Process the data
     total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].sum().reset_index()
     total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
@@ -366,12 +467,13 @@ if __name__ == "__main__":
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
     heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
 
+    # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
-    
     time_index = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
     datetime_df = pd.DataFrame()
     datetime_df["DATETIME"] = time_index
     
+    # Select light vehicles for analysis
     light_pivot_df = temp_light_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
     light_merged_df = datetime_df.merge(light_pivot_df, on='DATETIME', how='left')
 
@@ -383,13 +485,25 @@ if __name__ == "__main__":
     session = Session()
     
     filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
-    #flow_data_imputation(filtered_meta_df, light_df, process_engine)
-
+    flow_data_imputation(filtered_meta_df, light_df, process_engine)
     
-    # Light and Heavy
+    #session.commit()
+    #session.close()
+    ####################################################################################################
+    # Imputation method visualization, take one station for visualization
+    """
+    station_df = light_merged_df[["DATETIME", "00200091"]]
+    station_df.to_excel("./result/flow/imputation/raw.xlsx", index=False)
     
+    imputation_methods = ["Linear", "Forward", "Backward", "Forward-Backward"]
+    for method in imputation_methods:
+        imputed_df = imputation(station_df, save_path="./result/flow/imputation", imputation_method=method)
+        imputed_df = pd.read_excel("./result/flow/imputation/imputed_data_" + method + ".xlsx")
     
-    # Region
+    station_df = pd.read_excel("./result/flow/imputation/raw.xlsx")
+    imputation_visualization(station_df, '2019-12-10 00:00:00', '2019-12-17 00:00:00', 
+                                        ["Linear", "Forward", "Backward", "Forward-Backward"],
+                                        "00200091",
+                                        "./result/flow/imputation/")
+    """
     
-    
-    # Weekday
