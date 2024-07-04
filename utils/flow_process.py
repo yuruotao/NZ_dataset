@@ -236,15 +236,15 @@ def flow_missing_data_visualization(input_df, output_path):
     for chunk in chunks:
         print(index)
         # Matrix plot
-        ax = msno.matrix(chunk, fontsize=20, figsize=(20, 16), label_rotation=45, freq="6M")
-        plt.xlabel("Flow Monitoring Sites", fontsize=20)
+        ax = msno.matrix(chunk, fontsize=20, figsize=(20, 16), label_rotation=45, freq="1M")
+        plt.xlabel("Flow Count Sites", fontsize=20)
         plt.ylabel("Sample Points", fontsize=20)
         plt.savefig(missing_matrix_path + 'matrix_' + str(index) + '.png', dpi=600)
         plt.close()
         
         # Bar plot
         ax = msno.bar(chunk, fontsize=20, figsize=(20, 16), label_rotation=45)
-        plt.xlabel("Flow Monitoring Sites", fontsize=20)
+        plt.xlabel("Flow Count Sites", fontsize=20)
         plt.ylabel("Sample Points", fontsize=20)
         plt.savefig(missing_bar_path + 'bar_' + str(index) + '.png', dpi=600)
         plt.close()
@@ -350,36 +350,41 @@ if __name__ == "__main__":
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
+    flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     
-    
-    
-    total_flow = df.groupby(['SITEREF', 'DATETIME'])['FLOW'].sum().reset_index()
+    total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].sum().reset_index()
     total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
+    flow_df = flow_df.merge(total_flow, on=['SITEREF', 'DATETIME', 'WEIGHT'])
+    flow_df['PROPORTION'] = flow_df['FLOW'] / flow_df['TOTAL_FLOW']
     
-    # Plot the comparison between directions for each station
-
-
-    """
-    temp_flow_df = flow_df[["DATETIME", "SITEREF", "FLOW"]]
+    # Filter out the rows with proportion higher than 50%, row PROPORTION is the imbalance
+    flow_df = flow_df[flow_df['PROPORTION'] > 0.5]
+    flow_df = flow_df.drop(columns=['DIRECTION'])
     
-    time_index = pd.date_range(start="2021-01-01", end="2021-12-31", freq="D")
+    # Select by weight
+    light_df = flow_df[flow_df['WEIGHT'] == "Light"]
+    heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
+
+    temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
+    
+    time_index = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
     datetime_df = pd.DataFrame()
     datetime_df["DATETIME"] = time_index
     
-    pivot_df = temp_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
-    merged_df = datetime_df.merge(pivot_df, on='DATETIME', how='left')
-    
+    light_pivot_df = temp_light_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
+    light_merged_df = datetime_df.merge(light_pivot_df, on='DATETIME', how='left')
+
     # Visualize the missing data
-    flow_missing_data_visualization(merged_df, "./result/flow/missing")
+    #flow_missing_data_visualization(light_merged_df, "./result/flow/missing")
     
     # Filter based on missing value percentage
     Session = sessionmaker(bind=process_engine)
     session = Session()
     
-    filtered_meta_df = flow_missing_filter(flow_meta_df, merged_df, 30, process_engine)
-    flow_data_imputation(filtered_meta_df, flow_df, process_engine)
-    """
+    filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
+    #flow_data_imputation(filtered_meta_df, light_df, process_engine)
+
     
     # Light and Heavy
     

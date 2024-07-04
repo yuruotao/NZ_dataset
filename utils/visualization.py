@@ -88,3 +88,8 @@ def distribution_visualization(flow_meta_df, weather_meta_df, highway_shp_path, 
 
     return None
 
+def direction_percentage_visualization():
+    
+    
+    
+    return None
