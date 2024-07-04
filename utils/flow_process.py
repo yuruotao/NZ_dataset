@@ -86,12 +86,13 @@ def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
     for file in traffic_flow_list:
         print(file)
         if "2019" in file:
-            temp_df = pd.read_csv(input_path + file, encoding='unicode_escape')
+            temp_df = pd.read_csv(input_path + file)
             # class siteRef startDatetime endDatetime direction count
             temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
             temp_df = temp_df[temp_df["siteRef"].isin(siteRef_list)]
             temp_df = temp_df.rename(columns={"startDatetime":"Datetime", "count":"Flow", 
                                             "class":"Weight", "direction":"Direction"})
+            
             temp_df = temp_df[["Datetime", "siteRef", "Flow", "Weight", "Direction"]]
             temp_df['Datetime'] = pd.to_datetime(temp_df['Datetime'], format='%d-%b-%Y %H:%M')
             temp_df['Weight'] = temp_df['Weight'].replace('H', 'Heavy')
@@ -341,23 +342,23 @@ if __name__ == "__main__":
     flow_meta_df.to_sql('filtered_flow_meta', con=process_engine, if_exists='replace', index=False)
 
     # If RAM is huge, select from the established database
-    #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2021')"
+    #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
     #flow_df = pd.read_sql(flow_query, engine)
     #flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
     #print(flow_df)
     
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-    flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, True)
+    flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     
+    
+    
+    total_flow = df.groupby(['SITEREF', 'DATETIME'])['FLOW'].sum().reset_index()
+    total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
     
     # Plot the comparison between directions for each station
-    #direction_plot(siteRef_list, heavy_flow_df, "./result/traffic/direction/heavy/")
-    #direction_plot(siteRef_list, light_flow_df, "./result/traffic/direction/light/")
-    
-    
-        
+
 
     """
     temp_flow_df = flow_df[["DATETIME", "SITEREF", "FLOW"]]
