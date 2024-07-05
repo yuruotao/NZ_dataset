@@ -18,7 +18,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 from shapely.geometry import Point
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 
 from basic_statistics import basic_statistics
 
@@ -444,7 +444,6 @@ def df_to_gdf(df, lon_name, lat_name):
 
     return gdf
 
-
 if __name__ == "__main__":
     process_db_address = 'sqlite:///./data/NZDB_flow_process.db'
     process_engine = create_engine(process_db_address)
@@ -665,6 +664,7 @@ if __name__ == "__main__":
     """
     ####################################################################################################
     # Weather correlation
+    
     # Resample data to daily frequency and calculate max and mean
     daily_flow_df = pd.DataFrame()
     daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
@@ -725,7 +725,8 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("./result/weather/correlation.png", dpi=600)
     plt.close()
-    
+    """
+    """
     ####################################################################################################
     # Extreme weather
     """
@@ -782,7 +783,8 @@ if __name__ == "__main__":
     holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('August_2019_New_Zealand_Storm', 'Winter Storm')
     holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('December_2019_New_Zealand_Storm', 'Summer Storm')
     
-    event_colors = {"New Year's Day":                   '#5a189a', 
+    event_colors = {
+                    "New Year's Day":                   '#5a189a', 
                     "Day after New Year's Day":         '#7b2cbf', 
                     'Regional anniversary':             '#00a6fb',
                     'Waitangi Day':                     '#003049',
@@ -844,7 +846,81 @@ if __name__ == "__main__":
     
     fig.legend(loc='outside center right')        
     
-    plt.savefig("./result/events.png", dpi=600)
+    plt.savefig("./result/event/events.png", dpi=600)
+    plt.close()
+
+    alphabet_list = [chr(chNum) for chNum in list(range(ord('a'),ord('z')+1))]
+    fig, axs = plt.subplots(5, 3, figsize=(18, 20))
+    # Flatten the axes array for easy iteration
+    axs = axs.flatten()
+    
+    event_num = 0
+    for event, color in event_colors.items():
+        subset = holiday_extreme_df[holiday_extreme_df["EVENT"] == event]
+        print(event)
+        
+        if event == "None":
+            break
+        
+        if not subset.empty:
+            dfs = []
+            start_idx = subset.index[0]
+            end_idx = None
+        
+            found = 0
+            for idx in subset.index[1:]:
+                if found == 1:
+                    break
+                
+                if ((idx - start_idx).seconds // 3600) > 1:
+                    # End of current part found
+                    start_time = start_idx
+                    end_time = start_idx + pd.Timedelta(days=1)
+                    
+                    dfs.append(subset.loc[start_idx:end_idx])
+                    
+                    start_idx = idx
+                    end_idx = None
+                    found = 1
+                else:
+                    # Continuation of current part
+                    end_idx = idx
+            if dfs:
+                ax = axs[event_num]
+                
+                extreme_df = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time) & (holiday_extreme_df.index <= end_time)]
+                extreme_df_before = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time - pd.Timedelta(days=1)) & 
+                (holiday_extreme_df.index <= end_time - pd.Timedelta(days=1))]
+                extreme_df_before = extreme_df_before.shift(freq="24H")
+                extreme_df_after = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time + pd.Timedelta(days=1)) & 
+                (holiday_extreme_df.index <= end_time + pd.Timedelta(days=1))]
+                extreme_df_after = extreme_df_after.shift(freq="-24H")
+                
+                if event_num == 0:
+                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b", label="Event")
+                    ax.plot(extreme_df_before.index, extreme_df_before['Auckland'], color='#274c77', label="Previous Day")
+                    ax.plot(extreme_df_after.index, extreme_df_after['Auckland'], color='#fca311', label="Next Day")
+                else:
+                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b")
+                    ax.plot(extreme_df_before.index, extreme_df_before['Auckland'], color='#274c77')
+                    ax.plot(extreme_df_after.index, extreme_df_after['Auckland'], color='#fca311')
+                
+                ax.set_title(alphabet_list[event_num] + ") " + event, fontsize=20)
+                ax.set_xlim(extreme_df.index.min(), extreme_df.index.max())
+                ax.tick_params(axis='both', which='major', labelsize=20)
+                ax.set_xticklabels(ax.get_xticklabels(), rotation=45) 
+                ax.set(xlabel="", ylabel="")
+                
+                event_num = event_num + 1
+  
+    # Hide the empty subplots
+    for ax in axs[13:]:
+        ax.axis('off')
+
+    fig.legend(loc='lower right', fontsize=20, bbox_to_anchor=(0.5, 0.11))
+    # Adjust layout
+    plt.tight_layout()
+    # Show the plot
+    plt.savefig("./result/event/event_sub_all.png", dpi=600)
     plt.close()
     """
-
