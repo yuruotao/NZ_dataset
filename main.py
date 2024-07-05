@@ -49,7 +49,6 @@ if __name__ == "__main__":
     weather_meta_query = 'SELECT * FROM filtered_weather_meta'
     weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
     
-    # Calculate the nearest flow point to weather point
     flow_meta_gdf = df_to_gdf(flow_meta_df, "LON", "LAT")
     weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
     
@@ -60,10 +59,6 @@ if __name__ == "__main__":
     Christchurch_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "060"]
     Auckland_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "076"]
     
-    place_list = ["Wellington", "Christchurch", "Auckland"]
-    shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
-    weather_meta_list = [weather_meta_gdf[weather_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
-    flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
     ####################################################################################################
     # Weather correlation
     
@@ -74,5 +69,9 @@ if __name__ == "__main__":
     weather_df = pd.read_sql(weather_df_query, weather_process_engine)
 
     
+    city_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
+
     
+    auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
+    auckland_df['Month'] = auckland_df['DATETIME'].dt.month
     

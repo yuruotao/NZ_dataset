@@ -597,7 +597,7 @@ if __name__ == "__main__":
         city_traffic_df = pd.merge(city_traffic_df, average_total_flow, on='DATETIME', how="left")
     
     city_traffic_df.to_excel("./result/flow/city_mean.xlsx", index=False)
-    """
+    
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
     city_traffic_df = city_week_traffic_df
     
@@ -629,42 +629,48 @@ if __name__ == "__main__":
     fig.legend(handles, labels, loc='center right', bbox_to_anchor=(1.015, 0.5), frameon=False, fontsize=16)
     plt.savefig("./result/flow/weekday_weekend.png", dpi=600)
     plt.close()
+    """
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
+    city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
+    city_traffic_df = city_week_traffic_df
+    
     auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
     auckland_df['Month'] = auckland_df['DATETIME'].dt.month
-    
+    """
     morning_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 8) & (auckland_df['DATETIME'].dt.hour < 9)]
     afternoon_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 17) & (auckland_df['DATETIME'].dt.hour < 18)]
     
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
     for i in range(2):
         axes[i].tick_params(axis='both', which='major', labelsize=16)
-        axes[i].set_xticks(np.arange(1, 13, 2))
+        #axes[i].set_xticks(np.arange(1, 13, 2))
     
-    sns.boxplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], palette="mako")
+    sns.boxplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], palette="Spectral")
     sns.boxplot(x='Month', y='Auckland', data=afternoon_df, ax=axes[1], palette="mako")
-    sns.stripplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], size=4, color=".3")
-    sns.stripplot(x='Month', y='Auckland', data=morning_df, ax=axes[1], size=4, color=".3")
+    sns.stripplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], size=4, color="#495057")
+    sns.stripplot(x='Month', y='Auckland', data=afternoon_df, ax=axes[1], size=4, color="#495057")
     
     axes[0].set_xlabel('Morning Peak', fontsize=16)
     axes[1].set_xlabel('Afternoon Peak', fontsize=16)
     axes[0].set_ylabel('Total flow count', fontsize=16)
     fig.text(0.5, 0.04, 'Month', ha='center', va='center', fontsize=16)
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig("./result/flow/peak_time.png", dpi=600)
     plt.close()
-    
+    """
     ####################################################################################################
     # Extreme weather
     extreme_weather_query = 'SELECT * FROM extreme_weather'
     extreme_weather_df = pd.read_sql(extreme_weather_query, engine)
-
     
+    extreme_weather_df = extreme_weather_df[extreme_weather_df["START_DATE"].dt.year == 2019]
+    print(extreme_weather_df)
     ####################################################################################################
     # Holiday
     holiday_query = 'SELECT * FROM holiday'
     holiday_df = pd.read_sql(holiday_query, engine)
-
+    holiday_df = holiday_df[holiday_df["START_DATE"].dt.year == 2019]
+    print(holiday_df)
     
