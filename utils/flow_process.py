@@ -636,7 +636,9 @@ if __name__ == "__main__":
     city_traffic_df = city_week_traffic_df
     
     auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
+    auckland_df['DATETIME'] = pd.to_datetime(auckland_df['DATETIME'])
     auckland_df['Month'] = auckland_df['DATETIME'].dt.month
+    
     """
     morning_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 8) & (auckland_df['DATETIME'].dt.hour < 9)]
     afternoon_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 17) & (auckland_df['DATETIME'].dt.hour < 18)]
@@ -662,15 +664,127 @@ if __name__ == "__main__":
     """
     ####################################################################################################
     # Extreme weather
+    holiday_extreme_df = pd.DataFrame()
+    holiday_extreme_df["DATETIME"] = time_index
+    
+    # Resample data to daily frequency and calculate max and mean
+    #auckland_df.set_index('DATETIME', inplace=True)
+    #holiday_extreme_df["MAX_FLOW"] = auckland_df['Auckland'].resample('D').max().to_list()
+    #holiday_extreme_df["MEAN_FLOW"] = auckland_df['Auckland'].resample('D').mean().to_list()
+    
     extreme_weather_query = 'SELECT * FROM extreme_weather'
     extreme_weather_df = pd.read_sql(extreme_weather_query, engine)
-    
+    extreme_weather_df['START_DATE'] = pd.to_datetime(extreme_weather_df['START_DATE'])
     extreme_weather_df = extreme_weather_df[extreme_weather_df["START_DATE"].dt.year == 2019]
-    print(extreme_weather_df)
-    ####################################################################################################
+    extreme_weather_df = extreme_weather_df[extreme_weather_df["REGION"].isin(["New Zealand"])]
+    extreme_weather_df = extreme_weather_df[["START_DATE", "IDENTIFIER"]]
+    extreme_weather_df = extreme_weather_df.rename(columns={"IDENTIFIER":"EVENT"})
+    
+    # Extend the date
+    extended_weather_df = pd.DataFrame({'DATETIME': time_index})
+    extended_weather_df['START_DATE'] = extended_weather_df['DATETIME'].dt.date
+    extended_weather_df['START_DATE'] = extended_weather_df['START_DATE'].astype(str)
+    extreme_weather_df['START_DATE'] = extreme_weather_df['START_DATE'].astype(str)
+    extreme_weather_df = pd.merge(extended_weather_df, extreme_weather_df, on='START_DATE', how='left')
+    extreme_weather_df = extreme_weather_df.drop(columns='START_DATE')
+    
+    # Merge
+    holiday_extreme_df = pd.merge(holiday_extreme_df, extreme_weather_df, on='DATETIME', how="left")
+
     # Holiday
     holiday_query = 'SELECT * FROM holiday'
     holiday_df = pd.read_sql(holiday_query, engine)
+    holiday_df['START_DATE'] = pd.to_datetime(holiday_df['START_DATE'])
     holiday_df = holiday_df[holiday_df["START_DATE"].dt.year == 2019]
-    print(holiday_df)
+    holiday_df = holiday_df[holiday_df["REGION"].isin(["all", "Auckland"])]
+    holiday_df = holiday_df[["START_DATE", "HOLIDAY"]]
+    holiday_df = holiday_df.rename(columns={"HOLIDAY":"EVENT"})
     
+    # Extend the date
+    extended_holiday_df = pd.DataFrame({'DATETIME': time_index})
+    extended_holiday_df['START_DATE'] = extended_holiday_df['DATETIME'].dt.date
+    extended_holiday_df['START_DATE'] = extended_holiday_df['START_DATE'].astype(str)
+    holiday_df['START_DATE'] = holiday_df['START_DATE'].astype(str)
+    holiday_df = pd.merge(extended_holiday_df, holiday_df, on='START_DATE', how='left')
+    holiday_df = holiday_df.drop(columns='START_DATE')
+    
+    holiday_extreme_df = pd.merge(holiday_extreme_df, holiday_df, on=['DATETIME'], how="left")
+    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT_x'].combine_first(holiday_extreme_df['EVENT_y'])
+    holiday_extreme_df = holiday_extreme_df.drop(columns=['EVENT_x', 'EVENT_y'])
+    
+    auckland_df = auckland_df[["DATETIME", "Auckland"]]
+    holiday_extreme_df = pd.merge(holiday_extreme_df, auckland_df, on='DATETIME', how='left')
+    
+    # Plot
+    holiday_extreme_df = holiday_extreme_df.fillna("None")
+    holiday_extreme_df = holiday_extreme_df.set_index("DATETIME")
+    
+    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('August_2019_New_Zealand_Storm', 'Winter Storm')
+    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('December_2019_New_Zealand_Storm', 'Summer Storm')
+    
+    event_colors = {"New Year's Day":                   '#5a189a', 
+                    "Day after New Year's Day":         '#7b2cbf', 
+                    'Regional anniversary':             '#00a6fb',
+                    'Waitangi Day':                     '#003049',
+                    'Good Friday':                      '#e09f3e',
+                    'Easter Monday':                    '#31572c',
+                    'ANZAC Day':                        '#3c6e71',
+                    "Queen's Birthday":                 '#ff7d00',
+                    'Winter Storm':                     '#bd1f36',
+                    'Labour Day':                       '#b08968',
+                    'Summer Storm':                     '#85182a',
+                    "Christmas Day":                    '#240046',
+                    "Boxing Day":                       '#3c096c',
+                    'None':                             "#FFFFFF"}
+    
+    fig, ax = plt.subplots(figsize=(26, 14), layout='constrained')
+    ax.tick_params(axis='both', which='major', labelsize=22)
+    ax.plot(holiday_extreme_df.index, holiday_extreme_df['Auckland'], color='#274c77')
+
+    matplotlib.rc('xtick', labelsize=22)
+    matplotlib.rc('ytick', labelsize=22)
+    plt.rc('legend', fontsize=22)
+    
+    for event, color in event_colors.items():
+        subset = holiday_extreme_df[holiday_extreme_df["EVENT"] == event]
+        print(event)
+        
+        if not subset.empty:
+            dfs = []
+            start_idx = subset.index[0]
+            end_idx = None
+        
+            for idx in subset.index[1:]:
+                if ((idx - start_idx).seconds // 3600) > 1:
+                    # End of current part found
+                    dfs.append(subset.loc[start_idx:end_idx])
+                    start_idx = idx
+                    end_idx = None
+                else:
+                    # Continuation of current part
+                    end_idx = idx
+
+            df_num = 0
+            for group_df in dfs:
+                if event == "None":
+                    ax.axvspan(group_df.index[0], group_df.index[-1], alpha=0, edgecolor='none')
+                else:
+                    if df_num == 0:
+                        ax.axvspan(group_df.index[0], group_df.index[-1], facecolor=color, alpha=0.5, edgecolor='none', label=str(event))
+                        df_num = df_num + 1
+                    else:
+                        ax.axvspan(group_df.index[0], group_df.index[-1], facecolor=color, alpha=0.5, edgecolor='none')
+                        df_num = df_num + 1
+    
+    ax.set_xlim(holiday_extreme_df.index.min(), holiday_extreme_df.index.max())
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
+    ax.set(xlabel="", ylabel="")
+    plt.xlabel("Time", fontsize=22)
+    plt.ylabel("Traffic Flow", fontsize=22)
+    
+    fig.legend(loc='outside center right')        
+    
+    plt.savefig("./result/events.png", dpi=600)
+    plt.close()
+    
+
