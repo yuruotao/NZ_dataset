@@ -16,6 +16,7 @@ import geopandas as gpd
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from shapely.geometry import Point
 
 from basic_statistics import basic_statistics
 
@@ -215,7 +216,7 @@ def flow_missing_filter(meta_df, merged_df, threshold, engine):
 
     return filtered_meta_df
 
-def flow_data_imputation(filtered_meta_df, merged_df, engine):
+def flow_data_imputation(filtered_meta_df, merged_df, engine, commit_flag):
 
 
     siteref_list = filtered_meta_df["SITEREF"].to_list()
@@ -248,8 +249,9 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine):
         temp_df = temp_df.reset_index()
         temp_df["SITEREF"] = siteref
 
-        temp_df.to_sql('filtered_flow', con=engine, if_exists='append', index=False)
-        basic_statistics_df.to_sql('basic_statistics_flow', con=engine, if_exists='append', index=False)
+        if commit_flag == True:
+            temp_df.to_sql('filtered_flow', con=engine, if_exists='append', index=False)
+            basic_statistics_df.to_sql('basic_statistics_flow', con=engine, if_exists='append', index=False)
 
     return None
 
@@ -430,6 +432,14 @@ def imputation_visualization(raw_data_df, start_time, end_time, method_list, col
     
     return None
 
+def df_to_gdf(df, lon_name, lat_name):
+    
+    geometry = [Point(xy) for xy in zip(df[lon_name], df[lat_name])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry)
+    gdf.set_crs(epsg=4167, inplace=True)
+
+    return gdf
+
 
 if __name__ == "__main__":
     process_db_address = 'sqlite:///./data/NZDB_flow_process.db'
@@ -438,7 +448,7 @@ if __name__ == "__main__":
     
     db_address = 'sqlite:///./data/NZDB/NZDB.db'
     engine = create_engine(db_address)
-    
+
     flow_meta_query = 'SELECT * FROM flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, engine)
 
@@ -463,6 +473,7 @@ if __name__ == "__main__":
     flow_df = flow_df[flow_df['PROPORTION'] > 0.5]
     flow_df = flow_df.drop(columns=['DIRECTION'])
     
+    """
     # Select by weight
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
     heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
@@ -485,8 +496,8 @@ if __name__ == "__main__":
     session = Session()
     
     filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
-    flow_data_imputation(filtered_meta_df, light_df, process_engine)
-    
+    flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
+    """
     #session.commit()
     #session.close()
     ####################################################################################################
@@ -506,4 +517,77 @@ if __name__ == "__main__":
                                         "00200091",
                                         "./result/flow/imputation/")
     """
+    ####################################################################################################
+    # Weight-percentage analysis
+    # 047-Wellington 060-Christchurch 076-Auckland
+    boundary_shp = gpd.read_file("./data/boundary/city_districts/city_districts.shp")
+    Wellington_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "047"]
+    Christchurch_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "060"]
+    Auckland_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "076"]
+    
+    filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
+    filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
+    flow_meta_gdf = df_to_gdf(filtered_meta_df, "LON", "LAT")
+    place_list = ["Wellington", "Christchurch", "Auckland"]
+    shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
+    flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
+    
+    
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
+    hue_order = ['Light', 'Heavy']
+    palette = {'Light': '#0466c8', 'Heavy': '#d90429'}
+    for iter in range(len(place_list)):
+        place = place_list[iter]
+        temp_flow_meta_gdf = flow_meta_list[iter]
+        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+        temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
+        temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
+        temp_flow_df = temp_flow_df.fillna(value=np.nan)
+        
+        if iter == 0:
+            scatter = sns.scatterplot(ax=axes[iter], data=temp_flow_df, x='PROPORTION', y=temp_flow_df['DATETIME'].dt.hour,
+                hue='WEIGHT', size='TOTAL_FLOW', sizes=(10, 500), hue_order=hue_order, palette=palette, linewidth=0)
+            handles, labels = scatter.get_legend_handles_labels()
+            handles.pop()
+            labels.pop()
+            handles.pop()
+            labels.pop()
+            # Create a single legend for the entire figure
+            fig.legend(handles, labels, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 1), frameon=False, fontsize=16)
+            scatter.legend_.remove()
+        else:
+            scatter = sns.scatterplot(ax=axes[iter], data=temp_flow_df, x='PROPORTION', y=temp_flow_df['DATETIME'].dt.hour,
+                hue='WEIGHT', size='TOTAL_FLOW', sizes=(10, 500), hue_order=hue_order, palette=palette, linewidth=0, legend=False)
+        
+        axes[iter].tick_params(axis='both', which='major', labelsize=16)
+        axes[iter].set_xlabel(place, fontsize=16)
+        axes[iter].set_yticks(np.arange(0, 24, 2))
+    
+    # Set shared y-axis label
+    axes[0].set_ylabel('Hour of day', fontsize=16)
+    fig.text(0.5, 0.04, 'Proportion (0.5 to 1)', ha='center', va='center', fontsize=16)
+    plt.tight_layout(rect=[0, 0.05, 1, 0.85])
+
+    plt.savefig("./result/flow/proportion.png", dpi=600)
+    
+    """"""
+    ####################################################################################################
+    # Weekday and weekend
+    
+    
+    ####################################################################################################
+    # Morning peak and afternoon peak of months
+    
+    
+    ####################################################################################################
+    # Extreme weather
+    extreme_weather_query = 'SELECT * FROM extreme_weather'
+    extreme_weather_df = pd.read_sql(extreme_weather_query, engine)
+
+    
+    ####################################################################################################
+    # Holiday
+    holiday_query = 'SELECT * FROM holiday'
+    holiday_df = pd.read_sql(holiday_query, engine)
+
     

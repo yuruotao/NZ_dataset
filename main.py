@@ -17,7 +17,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from utils.visualization import *
-from utils.flow_process import traffic_flow_import_19
+from utils.flow_process import *
+
 
 if __name__ == "__main__":
     # Plot the distribution
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     flow_process_engine = create_engine(flow_process_db_address)
     flow_meta_query = 'SELECT * FROM filtered_flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, flow_process_engine)
-    
+
     weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
     weather_process_engine = create_engine(weather_process_db_address)
     weather_meta_query = 'SELECT * FROM filtered_weather_meta'
@@ -57,34 +58,21 @@ if __name__ == "__main__":
     boundary_shp = gpd.read_file("./data/boundary/city_districts/city_districts.shp")
     Wellington_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "047"]
     Christchurch_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "060"]
-    Auckland_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "047"]
+    Auckland_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "076"]
     
-    
-    print(flow_meta_gdf)
-    print(weather_meta_gdf)
-    
-    ###########################################################
-    # Direction percentage
-    
-    
-
-    ###########################################################
-    # Merged analysis
-    # Weekday and weekend
-    
-    
-    # Morning peak and afternoon peak during months
-    
-    
-    ###########################################################
+    place_list = ["Wellington", "Christchurch", "Auckland"]
+    shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
+    weather_meta_list = [weather_meta_gdf[weather_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
+    flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
+    ####################################################################################################
     # Weather correlation
     
+    flow_df_query = 'SELECT * FROM filtered_flow'
+    flow_df = pd.read_sql(flow_df_query, flow_process_engine)
+    
+    weather_df_query = 'SELECT * FROM filtered_weather'
+    weather_df = pd.read_sql(weather_df_query, weather_process_engine)
+
     
     
-    ###########################################################
-    # Extreme weather
     
-    
-    ###########################################################
-    # Holiday
-    # 
