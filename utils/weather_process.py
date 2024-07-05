@@ -170,7 +170,6 @@ def NCDC_weather_data_imputation(filtered_meta_df, merged_df, engine):
         print(station_id)
         temp_df = merged_df[merged_df["STATION_ID"] == station_id]
         datetime_column = temp_df["DATETIME"]
-        station_id_column = temp_df["STATION_ID"]
         temp_df = temp_df.drop(columns=["DATETIME", "ID", "STATION_ID"])
         basic_statistics_df = basic_statistics(temp_df)
         basic_statistics_df["INDEX"] = str(station_id)
@@ -193,7 +192,7 @@ def NCDC_weather_data_imputation(filtered_meta_df, merged_df, engine):
             temp_df[column].fillna(mean_value, inplace=True)
 
         temp_df = temp_df.reset_index()
-        temp_df["STATION_ID"] = station_id_column
+        temp_df["STATION_ID"] = station_id
         
         temp_df.to_sql('filtered_weather', con=engine, if_exists='append', index=False)
         basic_statistics_df.to_sql('basic_statistics_weather', con=engine, if_exists='append', index=False)
@@ -237,13 +236,14 @@ if __name__ == "__main__":
     #session.close()
     ####################################################################################################
     # Output a dataframe of basic statistics
+    """
     basic_statistics_weather_query = 'SELECT * FROM basic_statistics_weather'
     basic_statistics_weather_df = pd.read_sql(basic_statistics_weather_query, process_engine)
     basic_statistics_weather_df = basic_statistics_weather_df[basic_statistics_weather_df["INDEX"] == "93004099999"]
     basic_statistics_weather_df = basic_statistics_weather_df[~basic_statistics_weather_df["INDICATOR"].isin(["VISIB", "GUST", "SNDP"])]
     basic_statistics_weather_df = basic_statistics_weather_df.round(2)
     basic_statistics_weather_df.to_excel("./result/weather/basic_statistics.xlsx", index=False)
-    
+    """
     
     
     

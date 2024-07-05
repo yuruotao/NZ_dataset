@@ -69,9 +69,5 @@ if __name__ == "__main__":
     weather_df = pd.read_sql(weather_df_query, weather_process_engine)
 
     
-    city_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
 
-    
-    auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
-    auckland_df['Month'] = auckland_df['DATETIME'].dt.month
     

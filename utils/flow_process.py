@@ -18,6 +18,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 from shapely.geometry import Point
+from scipy.stats import pearsonr
 
 from basic_statistics import basic_statistics
 
@@ -663,15 +664,74 @@ if __name__ == "__main__":
     plt.close()
     """
     ####################################################################################################
+    # Weather correlation
+    # Resample data to daily frequency and calculate max and mean
+    daily_flow_df = pd.DataFrame()
+    daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
+    auckland_df.set_index('DATETIME', inplace=True)
+    daily_flow_df["MAX_FLOW"] = auckland_df['Auckland'].resample('D').max().to_list()
+    daily_flow_df["MEAN_FLOW"] = auckland_df['Auckland'].resample('D').mean().to_list()
+    
+    weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
+    weather_process_engine = create_engine(weather_process_db_address)
+    weather_df_query = 'SELECT * FROM filtered_weather'
+    weather_df = pd.read_sql(weather_df_query, weather_process_engine)
+    weather_meta_query = 'SELECT * FROM filtered_weather_meta'
+    weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
+    weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
+    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Auckland_shp.unary_union)]
+    weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
+    auckland_weather_df = weather_df[weather_df["STATION_ID"].isin(weather_id_list)]
+    auckland_weather_df["DATETIME"] = pd.to_datetime(auckland_weather_df["DATETIME"])
+    auckland_weather_df = auckland_weather_df[auckland_weather_df["DATETIME"].dt.year == 2019]
+    auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "DEWP", "RH", "PRCP", "MXSPD"]]
+    auckland_weather_df = auckland_weather_df.groupby('DATETIME').mean().reset_index()
+    auckland_weather_df = auckland_weather_df.astype(str)
+    daily_flow_df = daily_flow_df.astype(str)
+    
+    correlation_df = pd.merge(auckland_weather_df, daily_flow_df, on='DATETIME', how='left')
+    correlation_df = correlation_df.drop(["DATETIME"], axis=1)
+    for col in correlation_df.columns:
+        correlation_df[col] = correlation_df[col].astype(float)
+    
+    # Plot the correlation
+    matplotlib.rc('xtick', labelsize=24)
+    matplotlib.rc('ytick', labelsize=24)
+    plt.rc('legend', fontsize=24)
+    
+    def corrfunc(x, y, **kwds):
+        cmap = kwds['cmap']
+        norm = kwds['norm']
+        ax = plt.gca()
+        ax.tick_params(bottom=False, top=False, left=False, right=False, axis="both", which="major", labelsize=22)
+        sns.despine(ax=ax, bottom=True, top=True, left=True, right=True)
+        r, _ = pearsonr(x, y)
+        facecolor = cmap(norm(r))
+        ax.set_facecolor(facecolor)
+        lightness = (max(facecolor[:3]) + min(facecolor[:3]) ) / 2
+        # Correlation number on the plot
+        ax.annotate(f"{r:.2f}", xy=(.5, .5), xycoords=ax.transAxes,
+                color='white' if lightness < 0.7 else 'black', size=28, ha='center', va='center')
+    
+    g = sns.PairGrid(correlation_df)
+    g.map_lower(plt.scatter, s=22)
+    g.map_diag(sns.histplot, kde=False)
+    g.map_upper(corrfunc, cmap=plt.get_cmap('crest'), norm=plt.Normalize(vmin=0, vmax=1))
+    
+    # Adjust label size for all axes
+    for ax in g.axes.flatten():
+        ax.tick_params(axis='both', which='major', labelsize=22)
+    
+    plt.tight_layout()
+    plt.savefig("./result/weather/correlation.png", dpi=600)
+    plt.close()
+    
+    ####################################################################################################
     # Extreme weather
+    """
     holiday_extreme_df = pd.DataFrame()
     holiday_extreme_df["DATETIME"] = time_index
-    
-    # Resample data to daily frequency and calculate max and mean
-    #auckland_df.set_index('DATETIME', inplace=True)
-    #holiday_extreme_df["MAX_FLOW"] = auckland_df['Auckland'].resample('D').max().to_list()
-    #holiday_extreme_df["MEAN_FLOW"] = auckland_df['Auckland'].resample('D').mean().to_list()
-    
+
     extreme_weather_query = 'SELECT * FROM extreme_weather'
     extreme_weather_df = pd.read_sql(extreme_weather_query, engine)
     extreme_weather_df['START_DATE'] = pd.to_datetime(extreme_weather_df['START_DATE'])
@@ -786,5 +846,5 @@ if __name__ == "__main__":
     
     plt.savefig("./result/events.png", dpi=600)
     plt.close()
-    
+    """
 
