@@ -69,5 +69,3 @@ if __name__ == "__main__":
     weather_df = pd.read_sql(weather_df_query, weather_process_engine)
 
     
-
-    
