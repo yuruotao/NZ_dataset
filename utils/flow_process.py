@@ -16,6 +16,7 @@ import geopandas as gpd
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 from shapely.geometry import Point
 
 from basic_statistics import basic_statistics
@@ -220,7 +221,7 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine, commit_flag):
 
 
     siteref_list = filtered_meta_df["SITEREF"].to_list()
-    
+    imputed_df = pd.DataFrame()
     for siteref in siteref_list:
         print(siteref)
         temp_df = merged_df[merged_df["SITEREF"] == siteref]
@@ -229,8 +230,8 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine, commit_flag):
         basic_statistics_df = basic_statistics(temp_df)
         basic_statistics_df["INDEX"] = str(siteref)
 
-        forward_df = temp_df.shift(-24*4)
-        backward_df = temp_df.shift(24*4)
+        forward_df = temp_df.shift(-24*4*7)
+        backward_df = temp_df.shift(24*4*7)
         average_values = (forward_df + backward_df) / 2
         
         temp_df = temp_df.copy()
@@ -252,8 +253,10 @@ def flow_data_imputation(filtered_meta_df, merged_df, engine, commit_flag):
         if commit_flag == True:
             temp_df.to_sql('filtered_flow', con=engine, if_exists='append', index=False)
             basic_statistics_df.to_sql('basic_statistics_flow', con=engine, if_exists='append', index=False)
+        
+        imputed_df = pd.concat([imputed_df, temp_df], axis=0)
 
-    return None
+    return imputed_df
 
 def imputation(input_df, imputation_method, save_path):
     """carry out the imputation for raw data with missing values
@@ -280,8 +283,8 @@ def imputation(input_df, imputation_method, save_path):
         imputed_df = input_df.interpolate(method='linear')
 
     elif imputation_method == "Forward-Backward":
-        forward_df = input_df.shift(-4*24)
-        backward_df = input_df.shift(4*24)
+        forward_df = input_df.shift(-4*24*7)
+        backward_df = input_df.shift(4*24*7)
         
         average_values = (forward_df + backward_df) / 2
         temp_df = input_df.copy()
@@ -315,7 +318,7 @@ def imputation(input_df, imputation_method, save_path):
         imputed_df = temp_df.reset_index(drop=True)
 
     elif imputation_method == "Forward":
-        imputed_df = input_df.fillna(input_df.shift(-4*24))
+        imputed_df = input_df.fillna(input_df.shift(-4*24*7))
         temp_df = imputed_df
         
         temp_df = pd.concat([datetime_column, temp_df], axis=1)
@@ -344,7 +347,7 @@ def imputation(input_df, imputation_method, save_path):
         imputed_df = temp_df.reset_index(drop=True)
         
     elif imputation_method == "Backward":
-        imputed_df = input_df.fillna(input_df.shift(4*24))
+        imputed_df = input_df.fillna(input_df.shift(4*24*7))
         temp_df = imputed_df
         temp_df = pd.concat([datetime_column, temp_df], axis=1)
         temp_df.set_index('DATETIME', inplace=True)
@@ -451,12 +454,17 @@ if __name__ == "__main__":
 
     flow_meta_query = 'SELECT * FROM flow_meta'
     flow_meta_df = pd.read_sql(flow_meta_query, engine)
+    
+    time_index = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
+    datetime_df = pd.DataFrame()
+    datetime_df["DATETIME"] = time_index
 
     # If RAM is huge, select from the established database
     #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
     #flow_df = pd.read_sql(flow_query, engine)
     #flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
     
+    """
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
@@ -473,16 +481,12 @@ if __name__ == "__main__":
     flow_df = flow_df[flow_df['PROPORTION'] > 0.5]
     flow_df = flow_df.drop(columns=['DIRECTION'])
     
-    """
     # Select by weight
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
     heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
 
     # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
-    time_index = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
-    datetime_df = pd.DataFrame()
-    datetime_df["DATETIME"] = time_index
     
     # Select light vehicles for analysis
     light_pivot_df = temp_light_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
@@ -495,8 +499,10 @@ if __name__ == "__main__":
     Session = sessionmaker(bind=process_engine)
     session = Session()
     
-    filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
-    flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
+    #filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
+    filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
+    filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
+    imputed_light_df = flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
     """
     #session.commit()
     #session.close()
@@ -532,7 +538,7 @@ if __name__ == "__main__":
     shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
     flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
     
-    
+    """
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
     hue_order = ['Light', 'Heavy']
     palette = {'Light': '#0466c8', 'Heavy': '#d90429'}
@@ -569,15 +575,86 @@ if __name__ == "__main__":
     plt.tight_layout(rect=[0, 0.05, 1, 0.85])
 
     plt.savefig("./result/flow/proportion.png", dpi=600)
-    
-    """"""
+    plt.close()
+    """
     ####################################################################################################
     # Weekday and weekend
+    """
+    light_df = imputed_light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
+    print(light_df)
     
+    city_traffic_df = pd.DataFrame()
+    city_traffic_df["DATETIME"] = time_index
+    for iter in range(len(place_list)):
+        place = place_list[iter]
+        temp_flow_meta_gdf = flow_meta_list[iter]
+        
+        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+        temp_light_df = light_df[light_df['SITEREF'].isin(temp_siteRef_list)]
+        temp_light_df = temp_light_df.rename(columns={'TOTAL_FLOW':place})
+        average_total_flow = temp_light_df.groupby('DATETIME')[place].mean()
+
+        city_traffic_df = pd.merge(city_traffic_df, average_total_flow, on='DATETIME', how="left")
     
+    city_traffic_df.to_excel("./result/flow/city_mean.xlsx", index=False)
+    """
+    city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
+    city_traffic_df = city_week_traffic_df
+    
+    city_week_traffic_df['Hour'] = city_week_traffic_df['DATETIME'].dt.strftime('%H:%M')
+    city_week_traffic_df['DayOfWeek'] = city_week_traffic_df['DATETIME'].dt.dayofweek
+    city_week_traffic_df['DayType'] = city_week_traffic_df['DayOfWeek'].apply(lambda x: 'Weekend' if x >= 5 else 'Weekday')
+    week_df = city_week_traffic_df.groupby(['DayType', 'Hour']).mean().reset_index()
+    
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
+    region_palette = {"Wellington":'#fca311', "Christchurch":'#0466c8', "Auckland":'#c1121f'}
+    
+    for col_name in place_list:
+        sns.lineplot(x='Hour', y=col_name, data=week_df[week_df['DayType'] == 'Weekday'], ax=axes[0], linewidth=2.5, color=region_palette.get(col_name))
+        sns.lineplot(x='Hour', y=col_name, data=week_df[week_df['DayType'] == 'Weekend'], ax=axes[1], linewidth=2.5, color=region_palette.get(col_name))
+
+    for i in range(2):
+        axes[i].tick_params(axis='both', which='major', labelsize=16)
+        axes[i].set_xlim(week_df.Hour.min(), week_df.Hour.max())
+        axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5)) 
+        axes[i].set(xlabel="")
+    
+    axes[0].set_ylabel('Total flow count', fontsize=16)
+    fig.text(0.5, 0.04, 'Time of the day', ha='center', va='center', fontsize=16)
+    
+    handles = [plt.Line2D([0], [0], color=color, lw=2.5) for color in region_palette.values()]
+    labels = list(region_palette.keys())
+    
+    plt.tight_layout(rect=[0, 0.05, 0.85, 1])
+    fig.legend(handles, labels, loc='center right', bbox_to_anchor=(1.015, 0.5), frameon=False, fontsize=16)
+    plt.savefig("./result/flow/weekday_weekend.png", dpi=600)
+    plt.close()
     ####################################################################################################
-    # Morning peak and afternoon peak of months
+    # Morning peak and afternoon peak of Auckland
+    auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
+    auckland_df['Month'] = auckland_df['DATETIME'].dt.month
     
+    morning_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 8) & (auckland_df['DATETIME'].dt.hour < 9)]
+    afternoon_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 17) & (auckland_df['DATETIME'].dt.hour < 18)]
+    
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
+    for i in range(2):
+        axes[i].tick_params(axis='both', which='major', labelsize=16)
+        axes[i].set_xticks(np.arange(1, 13, 2))
+    
+    sns.boxplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], palette="mako")
+    sns.boxplot(x='Month', y='Auckland', data=afternoon_df, ax=axes[1], palette="mako")
+    sns.stripplot(x='Month', y='Auckland', data=morning_df, ax=axes[0], size=4, color=".3")
+    sns.stripplot(x='Month', y='Auckland', data=morning_df, ax=axes[1], size=4, color=".3")
+    
+    axes[0].set_xlabel('Morning Peak', fontsize=16)
+    axes[1].set_xlabel('Afternoon Peak', fontsize=16)
+    axes[0].set_ylabel('Total flow count', fontsize=16)
+    fig.text(0.5, 0.04, 'Month', ha='center', va='center', fontsize=16)
+
+    plt.tight_layout()
+    plt.savefig("./result/flow/peak_time.png", dpi=600)
+    plt.close()
     
     ####################################################################################################
     # Extreme weather
