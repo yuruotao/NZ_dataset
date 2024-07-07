@@ -520,6 +520,7 @@ if __name__ == "__main__":
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
     heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
 
+    """
     # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
     
@@ -538,7 +539,7 @@ if __name__ == "__main__":
     filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
     filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
     imputed_light_df = flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
-
+    """
     #session.commit()
     #session.close()
     ####################################################################################################
@@ -573,6 +574,8 @@ if __name__ == "__main__":
     shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
     flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
     
+    # Direction visualization distribution
+    """
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
     hue_order = ['Light', 'Heavy']
     palette = {'Light': '#0466c8', 'Heavy': '#d90429'}
@@ -610,8 +613,45 @@ if __name__ == "__main__":
 
     plt.savefig("./result/flow/proportion.png", dpi=600)
     plt.close()
+    """
+    
+    # Direction visualization cat plot
+    sns.set_theme(style="whitegrid")
+    sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
+    sns.set_context("notebook", rc={"axes.titlesize":18, "axes.labelsize":18, "xtick.labelsize":16, "ytick.labelsize":16})
+    mpl.rcParams['font.family'] = 'Times New Roman'
+    region_palette = {"Wellington":'#fca311', "Christchurch":'#0466c8', "Auckland":'#c1121f'}
+    
+    cat_df = pd.DataFrame()
+    for iter in range(len(place_list)):
+        place = place_list[iter]
+        temp_flow_meta_gdf = flow_meta_list[iter]
+        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+        temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
+        temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
+        temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.hour
+        temp_flow_df["REGION"] = place
+        temp_flow_df = temp_flow_df.fillna(value=np.nan)
+        cat_df = pd.concat([cat_df, temp_flow_df], axis=0)
+    
+    g = sns.catplot(
+        data=cat_df, x="HOUR", y="PROPORTION", hue="REGION", col="WEIGHT",
+        capsize=.1, palette=region_palette, errorbar="se", hue_order=place_list,
+        kind="point", legend_out=True)
+    
+    for ax in g.axes.flat:
+        x_ticks = ax.get_xticks()
+        ax.set_xticks(x_ticks[::2])  # Show every other tick
+        ax.set_xticklabels(x_ticks[::2])
+    
+    g.despine(left=True)
+    
+    plt.savefig("./result/flow/proportion_cat.png", dpi=600)
+    plt.close()
+    """
     ####################################################################################################
     # Weekday and weekend
+    
     light_df = imputed_light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
     
     city_traffic_df = pd.DataFrame()
@@ -690,6 +730,7 @@ if __name__ == "__main__":
     plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig("./result/flow/peak_time.png", dpi=600)
     plt.close()
+    """
     ####################################################################################################
     # Weather correlation
     # Whole city
@@ -738,6 +779,7 @@ if __name__ == "__main__":
     plt.close()
     """
     
+    """
     # Weather data preparation
     weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
     weather_process_engine = create_engine(weather_process_db_address)
@@ -1016,3 +1058,4 @@ if __name__ == "__main__":
     # Show the plot
     plt.savefig("./result/event/event_sub_all.png", dpi=600)
     plt.close()
+    """
