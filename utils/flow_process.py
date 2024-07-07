@@ -1,5 +1,5 @@
 # Coding: utf-8
-# Script for weather data processing
+# Script for flow data processing
 import pandas as pd
 import numpy as np
 import os
