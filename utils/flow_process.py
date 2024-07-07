@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 from shapely.geometry import Point
 from scipy.stats import pearsonr, spearmanr
+from scipy.spatial import cKDTree
 
 from basic_statistics import basic_statistics
 
@@ -77,9 +78,10 @@ def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
         input_path (string): path of traffic flow between 2019
         siteRef_list (list): list contain strings of siteRef
         engine (sqlalchemy_engine): engine used for database creation
+        commit_flag (bool): determine whether to upload the data to database
 
     Returns:
-        None
+        dataframe
     """
 
     # Read all files within the folder
@@ -110,15 +112,19 @@ def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
     return df
 
 def lineplot_breaknans(data, break_at_nan=True, break_at_inf=True, **kwargs):
-    '''sns.lineplot by default doesn't break the line at nans or infs, 
-        which can lead to misleading plots.
-    See https://github.com/mwaskom/seaborn/issues/1552 
-        and https://stackoverflow.com/questions/52098537/avoid-plotting-missing-values-on-a-line-plot
-    
-    This function rectifies this, and allows the user to specify 
-        if it should break the line at nans, infs, or at both (default).
-    
-    Note: using this function means you can't use the `units` argument of sns.lineplot.'''
+    """Make lineplot break at nans
+
+    Args:
+        data (dataframe): data to be plotted
+        break_at_nan (bool, optional): whether to break at nan. Defaults to True.
+        break_at_inf (bool, optional): whether to break at inf. Defaults to True.
+
+    Raises:
+        ValueError: dataframe do not contain any column
+
+    Returns:
+        ax
+    """
     
     # Automatically detect the y column and use index as x
     if 'y' not in kwargs:
@@ -219,15 +225,33 @@ def flow_missing_filter(meta_df, merged_df, threshold, engine):
     return filtered_meta_df
 
 def flow_data_imputation(filtered_meta_df, merged_df, engine, commit_flag):
+    """impute the missing data
 
+    Args:
+        filtered_meta_df (dataframe): meta data of flow stations
+        merged_df (dataframe): flow data
+        engine (sqlalchemy_engine): engine to save the imputed flow data
+        commit_flag (bool): whether to commit data to the database
 
+    Returns:
+        imputed dataframe
+    """
+    time_index = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
+    datetime_df = pd.DataFrame()
+    datetime_df["DATETIME"] = time_index
+    
     siteref_list = filtered_meta_df["SITEREF"].to_list()
     imputed_df = pd.DataFrame()
     for siteref in siteref_list:
         print(siteref)
         temp_df = merged_df[merged_df["SITEREF"] == siteref]
+        temp_df = pd.merge(datetime_df, temp_df, on="DATETIME", how="left")
+        
         datetime_column = temp_df["DATETIME"]
-        temp_df = temp_df.drop(columns=["DATETIME", "SITEREF", "WEIGHT", "FLOW"])
+        try:
+            temp_df = temp_df.drop(columns=["DATETIME", "SITEREF", "WEIGHT", "FLOW"])
+        except:
+            temp_df = temp_df.drop(columns=["DATETIME", "SITEREF"])
         basic_statistics_df = basic_statistics(temp_df)
         basic_statistics_df["INDEX"] = str(siteref)
 
@@ -382,7 +406,19 @@ def imputation(input_df, imputation_method, save_path):
     return imputed_df
 
 def imputation_visualization(raw_data_df, start_time, end_time, method_list, column, output_path):
+    """Visualize the imputation methods
 
+    Args:
+        raw_data_df (dataframe): dataframe containing raw flow data
+        start_time (datetime): start time for plot
+        end_time (datetime): end time for plot
+        method_list (list): methods to be plotted
+        column (string): station for visualization
+        output_path (string): path to save the output figure
+
+    Returns:
+        None
+    """
     sns.set_theme(style="whitegrid")
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     
@@ -463,8 +499,7 @@ if __name__ == "__main__":
     #flow_query = "SELECT * FROM flow WHERE strftime('%Y', DATETIME) IN ('2019')"
     #flow_df = pd.read_sql(flow_query, engine)
     #flow_df = flow_df.astype({"DATETIME":"datetime64[ns]"})
-    
-    """
+
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
@@ -503,7 +538,7 @@ if __name__ == "__main__":
     filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
     filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
     imputed_light_df = flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
-    """
+
     #session.commit()
     #session.close()
     ####################################################################################################
@@ -538,7 +573,6 @@ if __name__ == "__main__":
     shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
     flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
     
-    """
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
     hue_order = ['Light', 'Heavy']
     palette = {'Light': '#0466c8', 'Heavy': '#d90429'}
@@ -576,12 +610,9 @@ if __name__ == "__main__":
 
     plt.savefig("./result/flow/proportion.png", dpi=600)
     plt.close()
-    """
     ####################################################################################################
     # Weekday and weekend
-    """
     light_df = imputed_light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
-    print(light_df)
     
     city_traffic_df = pd.DataFrame()
     city_traffic_df["DATETIME"] = time_index
@@ -629,7 +660,6 @@ if __name__ == "__main__":
     fig.legend(handles, labels, loc='center right', bbox_to_anchor=(1.015, 0.5), frameon=False, fontsize=16)
     plt.savefig("./result/flow/weekday_weekend.png", dpi=600)
     plt.close()
-    """
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
@@ -639,7 +669,6 @@ if __name__ == "__main__":
     auckland_df['DATETIME'] = pd.to_datetime(auckland_df['DATETIME'])
     auckland_df['Month'] = auckland_df['DATETIME'].dt.month
     
-    """
     morning_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 8) & (auckland_df['DATETIME'].dt.hour < 9)]
     afternoon_df = auckland_df[(auckland_df['DATETIME'].dt.hour >= 17) & (auckland_df['DATETIME'].dt.hour < 18)]
     
@@ -661,32 +690,14 @@ if __name__ == "__main__":
     plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig("./result/flow/peak_time.png", dpi=600)
     plt.close()
-    """
     ####################################################################################################
     # Weather correlation
-    
-    # Resample data to daily frequency and calculate max and mean
-    daily_flow_df = pd.DataFrame()
-    daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
+    # Whole city
+    """
     auckland_df.set_index('DATETIME', inplace=True)
     daily_flow_df["MAX_FLOW"] = auckland_df['Auckland'].resample('D').max().to_list()
     daily_flow_df["MEAN_FLOW"] = auckland_df['Auckland'].resample('D').mean().to_list()
     
-    weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
-    weather_process_engine = create_engine(weather_process_db_address)
-    weather_df_query = 'SELECT * FROM filtered_weather'
-    weather_df = pd.read_sql(weather_df_query, weather_process_engine)
-    weather_meta_query = 'SELECT * FROM filtered_weather_meta'
-    weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
-    weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
-    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Auckland_shp.unary_union)]
-    weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
-    auckland_weather_df = weather_df[weather_df["STATION_ID"].isin(weather_id_list)]
-    auckland_weather_df["DATETIME"] = pd.to_datetime(auckland_weather_df["DATETIME"])
-    auckland_weather_df = auckland_weather_df[auckland_weather_df["DATETIME"].dt.year == 2019]
-    auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "DEWP", "RH", "PRCP", "MXSPD"]]
-    auckland_weather_df = auckland_weather_df.groupby('DATETIME').mean().reset_index()
-    auckland_weather_df = auckland_weather_df.astype(str)
     daily_flow_df = daily_flow_df.astype(str)
     
     correlation_df = pd.merge(auckland_weather_df, daily_flow_df, on='DATETIME', how='left')
@@ -726,10 +737,92 @@ if __name__ == "__main__":
     plt.savefig("./result/weather/correlation.png", dpi=600)
     plt.close()
     """
-    """
+    
+    # Weather data preparation
+    weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
+    weather_process_engine = create_engine(weather_process_db_address)
+    weather_df_query = 'SELECT * FROM filtered_weather'
+    weather_df = pd.read_sql(weather_df_query, weather_process_engine)
+    weather_meta_query = 'SELECT * FROM filtered_weather_meta'
+    weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
+    weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
+    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Auckland_shp.unary_union)]
+    
+    # Flow data preparation
+    # Resample data to daily frequency and calculate max and mean
+    daily_flow_df = pd.DataFrame()
+    daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
+    auckland_flow_meta_gdf = flow_meta_gdf[flow_meta_gdf.geometry.within(Auckland_shp.unary_union)]
+    
+    # Calculate the nearest flow station to weather station
+    weather_coords = np.array(list(auckland_weather_meta_gdf.geometry.apply(lambda geom: (geom.x, geom.y))))
+    flow_coords = np.array(list(auckland_flow_meta_gdf.geometry.apply(lambda geom: (geom.x, geom.y))))
+    # Create a cKDTree for fast spatial queries
+    tree = cKDTree(flow_coords)
+    distances, indices = tree.query(weather_coords, k=1)
+    nearest_siteref = auckland_flow_meta_gdf.iloc[indices]['SITEREF'].values
+    auckland_weather_meta_gdf['NEAREST'] = nearest_siteref
+    
+    light_df = light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
+    weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
+    for weather_id in weather_id_list:
+        auckland_weather_df = weather_df[weather_df["STATION_ID"] == weather_id]
+        auckland_weather_df["DATETIME"] = pd.to_datetime(auckland_weather_df["DATETIME"])
+        auckland_weather_df = auckland_weather_df[auckland_weather_df["DATETIME"].dt.year == 2019]
+        auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "DEWP", "RH", "PRCP", "MXSPD"]]
+        auckland_weather_df = auckland_weather_df.groupby('DATETIME').mean().reset_index()
+        auckland_weather_df = auckland_weather_df.astype(str)
+        
+        temp_auckland_weather_meta_gdf = auckland_weather_meta_gdf[auckland_weather_meta_gdf["STATION_ID"] == weather_id]
+        temp_siteref = temp_auckland_weather_meta_gdf["NEAREST"].to_list()[0]
+        temp_auckland_flow_meta_gdf = auckland_flow_meta_gdf[auckland_flow_meta_gdf["SITEREF"] == temp_siteref]
+    
+        imputed_light_df = flow_data_imputation(temp_auckland_flow_meta_gdf, light_df, process_engine, False)
+        auckland_df = imputed_light_df[imputed_light_df["SITEREF"] == temp_siteref]
+        auckland_df = auckland_df[["DATETIME", "TOTAL_FLOW"]]
+        auckland_df.set_index('DATETIME', inplace=True)
+        daily_flow_df["MAX_FLOW"] = auckland_df['TOTAL_FLOW'].resample('D').max().to_list()
+        daily_flow_df["MEAN_FLOW"] = auckland_df['TOTAL_FLOW'].resample('D').mean().to_list()
+        daily_flow_df = daily_flow_df.astype(str)
+        
+        correlation_df = pd.merge(auckland_weather_df, daily_flow_df, on='DATETIME', how='left')
+        correlation_df = correlation_df.drop(["DATETIME"], axis=1)
+        for col in correlation_df.columns:
+            correlation_df[col] = correlation_df[col].astype(float)
+        
+        # Plot the correlation
+        matplotlib.rc('xtick', labelsize=24)
+        matplotlib.rc('ytick', labelsize=24)
+        plt.rc('legend', fontsize=24)
+        
+        def corrfunc(x, y, **kwds):
+            cmap = kwds['cmap']
+            norm = kwds['norm']
+            ax = plt.gca()
+            ax.tick_params(bottom=False, top=False, left=False, right=False, axis="both", which="major", labelsize=22)
+            sns.despine(ax=ax, bottom=True, top=True, left=True, right=True)
+            r, _ = pearsonr(x, y)
+            facecolor = cmap(norm(r))
+            ax.set_facecolor(facecolor)
+            lightness = (max(facecolor[:3]) + min(facecolor[:3]) ) / 2
+            # Correlation number on the plot
+            ax.annotate(f"{r:.2f}", xy=(.5, .5), xycoords=ax.transAxes,
+                    color='white' if lightness < 0.7 else 'black', size=28, ha='center', va='center')
+        
+        g = sns.PairGrid(correlation_df)
+        g.map_lower(plt.scatter, s=22)
+        g.map_diag(sns.histplot, kde=False)
+        g.map_upper(corrfunc, cmap=plt.get_cmap('crest'), norm=plt.Normalize(vmin=0, vmax=1))
+        
+        # Adjust label size for all axes
+        for ax in g.axes.flatten():
+            ax.tick_params(axis='both', which='major', labelsize=22)
+        
+        plt.tight_layout()
+        plt.savefig("./result/weather/correlation_" + weather_id + ".png", dpi=600)
+        plt.close()
     ####################################################################################################
     # Extreme weather
-    """
     holiday_extreme_df = pd.DataFrame()
     holiday_extreme_df["DATETIME"] = time_index
 
@@ -923,4 +1016,3 @@ if __name__ == "__main__":
     # Show the plot
     plt.savefig("./result/event/event_sub_all.png", dpi=600)
     plt.close()
-    """

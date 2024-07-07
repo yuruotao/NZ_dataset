@@ -1,5 +1,5 @@
 # Coding: utf-8
-# Main analysis
+# Distribution for stations
 import pandas as pd
 import numpy as np
 import os
@@ -17,12 +17,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from utils.visualization import *
-from utils.flow_process import *
-
 
 if __name__ == "__main__":
     # Plot the distribution
-    """
     raw_db_address = 'sqlite:///./data/NZDB/NZDB.db'
     raw_db_engine = create_engine(raw_db_address)
     raw_flow_meta_query = 'SELECT * FROM flow_meta'
@@ -35,7 +32,6 @@ if __name__ == "__main__":
                                highway_shp_path="./data/state_highway/state_highway.shp",
                                boundary_shp_path="./data/boundary/city_districts/city_districts.shp",
                                output_path="./result/distribution/")
-    """
     ####################################################################################################
     # Import data from missing filtered database
     # Connect to database
@@ -58,14 +54,27 @@ if __name__ == "__main__":
     Wellington_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "047"]
     Christchurch_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "060"]
     Auckland_shp = boundary_shp[boundary_shp["TA2023_V1_"] == "076"]
-    
+    city_list = ["Wellington", "Christchurch", "Auckland"]
+    shp_list = [Wellington_shp, Christchurch_shp, Auckland_shp]
+    flow_meta_list = [flow_meta_gdf[flow_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
+    weather_meta_list = [weather_meta_gdf[weather_meta_gdf.geometry.within(shp.unary_union)] for shp in shp_list]
     ####################################################################################################
-    # Weather correlation
-    
-    flow_df_query = 'SELECT * FROM filtered_flow'
-    flow_df = pd.read_sql(flow_df_query, flow_process_engine)
-    
-    weather_df_query = 'SELECT * FROM filtered_weather'
-    weather_df = pd.read_sql(weather_df_query, weather_process_engine)
-
+    # Output a dataframe of basic statistics
+    basic_statistics_weather_query = 'SELECT * FROM basic_statistics_weather'
+    basic_statistics_weather_df = pd.read_sql(basic_statistics_weather_query, weather_process_engine)
+    basic_statistics_weather_df = basic_statistics_weather_df[basic_statistics_weather_df["INDEX"] == "93004099999"]
+    basic_statistics_weather_df = basic_statistics_weather_df[~basic_statistics_weather_df["INDICATOR"].isin(["VISIB", "GUST", "SNDP"])]
+    basic_statistics_weather_df = basic_statistics_weather_df.round(2)
+    basic_statistics_weather_df.to_excel("./result/weather/basic_statistics.xlsx", index=False)
+    ####################################################################################################
+    # City distribution
+    highway_shp_path="./data/state_highway/state_highway.shp"
+    highway_shp = gpd.read_file(highway_shp_path)
+    for city in range(len(city_list)):
+        city_name = city_list[city]
+        city_flow_meta_gdf = flow_meta_list[city]
+        city_weather_meta_gdf = weather_meta_list[city]
+        boundary_main_shp = shp_list[city]
+        
+        city_distribution_visualization(city_name, highway_shp, city_flow_meta_gdf, city_weather_meta_gdf, boundary_main_shp, "./result/distribution/")
     

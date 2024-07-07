@@ -79,7 +79,7 @@ def weather_missing_data_visualization(input_df, output_path):
     """Visualize the missing data of flow data
 
     Args:
-        input_path (string): path to the raw data
+        input_df (dataframe): raw data's dataframe
         output_path (string): path to save the figure
 
     Returns:
@@ -157,8 +157,9 @@ def NCDC_weather_data_imputation(filtered_meta_df, merged_df, engine):
     Add relative humidity "RH" to the dataframe
 
     Args:
-        data_path (string): path to station data
-        output_path (string): path to store the imputed data
+        filtered_meta_df (dataframe): meta dataframe
+        merged_df (dataframe): dataframe containing merged weather data
+        engine (sqlalchemy_engine): engine used for database creation
 
     Returns:
         None
@@ -223,7 +224,7 @@ if __name__ == "__main__":
     merged_df = datetime_df.merge(pivot_df, on='DATETIME', how='left')
     
     # Visualize the missing data
-    #weather_missing_data_visualization(merged_df, "./result/weather/missing")
+    weather_missing_data_visualization(merged_df, "./result/weather/missing")
     
     # Filter based on missing value percentage
     Session = sessionmaker(bind=process_engine)
@@ -232,18 +233,6 @@ if __name__ == "__main__":
     filtered_meta_df = weather_missing_filter(weather_meta_df, merged_df, 30, process_engine)
     NCDC_weather_data_imputation(filtered_meta_df, weather_df, process_engine)
     
-    #session.commit()
-    #session.close()
-    ####################################################################################################
-    # Output a dataframe of basic statistics
-    """
-    basic_statistics_weather_query = 'SELECT * FROM basic_statistics_weather'
-    basic_statistics_weather_df = pd.read_sql(basic_statistics_weather_query, process_engine)
-    basic_statistics_weather_df = basic_statistics_weather_df[basic_statistics_weather_df["INDEX"] == "93004099999"]
-    basic_statistics_weather_df = basic_statistics_weather_df[~basic_statistics_weather_df["INDICATOR"].isin(["VISIB", "GUST", "SNDP"])]
-    basic_statistics_weather_df = basic_statistics_weather_df.round(2)
-    basic_statistics_weather_df.to_excel("./result/weather/basic_statistics.xlsx", index=False)
-    """
-    
-    
+    session.commit()
+    session.close()
     
