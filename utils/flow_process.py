@@ -801,13 +801,13 @@ if __name__ == "__main__":
     weather_meta_query = 'SELECT * FROM filtered_weather_meta'
     weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
     weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
-    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Christchurch_shp.unary_union)]
+    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Auckland_shp.unary_union)]
     
     # Flow data preparation
     # Resample data to daily frequency and calculate max and mean
     daily_flow_df = pd.DataFrame()
     daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
-    auckland_flow_meta_gdf = flow_meta_gdf[flow_meta_gdf.geometry.within(Christchurch_shp.unary_union)]
+    auckland_flow_meta_gdf = flow_meta_gdf[flow_meta_gdf.geometry.within(Auckland_shp.unary_union)]
     
     # Calculate the nearest flow station to weather station
     weather_coords = np.array(list(auckland_weather_meta_gdf.geometry.apply(lambda geom: (geom.x, geom.y))))
@@ -867,19 +867,28 @@ if __name__ == "__main__":
             # Correlation number on the plot
             ax.annotate(f"{r:.2f}", xy=(.5, .5), xycoords=ax.transAxes,
                     color='white' if lightness < 0.7 else 'black', size=28, ha='center', va='center')
-        
-        g = sns.PairGrid(correlation_df)
-        g.map_lower(plt.scatter, s=22)
-        g.map_diag(sns.histplot, kde=False)
-        g.map_upper(corrfunc, cmap=plt.get_cmap('crest'), norm=plt.Normalize(vmin=0, vmax=1))
-        
-        # Adjust label size for all axes
-        for ax in g.axes.flatten():
-            ax.tick_params(axis='both', which='major', labelsize=22)
-        
-        plt.tight_layout()
-        plt.savefig("./result/weather/correlation_" + weather_id + ".png", dpi=600)
-        plt.close()
+                
+        for i in range(2):
+            if i == 0: # With precipitation
+                temp_correlation_df = correlation_df[correlation_df["Precipitation(m)"] == 0]
+                g = sns.PairGrid(temp_correlation_df)
+    
+            else:
+                temp_correlation_df = correlation_df[correlation_df["Precipitation(m)"] > 0]
+                temp_correlation_df = temp_correlation_df.drop(["Precipitation(m)"], axis=1)
+                g = sns.PairGrid(temp_correlation_df)
+
+            g.map_lower(plt.scatter, s=22)
+            g.map_diag(sns.histplot, kde=False)
+            g.map_upper(corrfunc, cmap=plt.get_cmap('crest'), norm=plt.Normalize(vmin=0, vmax=1))
+            
+            # Adjust label size for all axes
+            for ax in g.axes.flatten():
+                ax.tick_params(axis='both', which='major', labelsize=22)
+            
+            plt.tight_layout()
+            plt.savefig("./result/weather/correlation_" + weather_id + "_" + str(i) + ".png", dpi=600)
+            plt.close()
     ####################################################################################################
     # Extreme weather
     event_df = pd.DataFrame()
@@ -1013,6 +1022,7 @@ if __name__ == "__main__":
     """
 
     # Subplot
+    """
     alphabet_list = [chr(chNum) for chNum in list(range(ord('a'),ord('z')+1))]
     fig, axs = plt.subplots(2, 3, figsize=(24, 12))
     # Flatten the axes array for easy iteration
@@ -1101,4 +1111,4 @@ if __name__ == "__main__":
     # Show the plot
     plt.savefig("./result/event/event_sub_all.png", dpi=600)
     plt.close()
-
+    """
