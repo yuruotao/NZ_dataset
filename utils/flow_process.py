@@ -473,7 +473,16 @@ def imputation_visualization(raw_data_df, start_time, end_time, method_list, col
     return None
 
 def df_to_gdf(df, lon_name, lat_name):
-    
+    """convert dataframe to geodataframe
+
+    Args:
+        df (dataframe): _description_
+        lon_name (string): column name for longitude
+        lat_name (string): column name for latitude
+
+    Returns:
+        geodataframe
+    """
     geometry = [Point(xy) for xy in zip(df[lon_name], df[lat_name])]
     gdf = gpd.GeoDataFrame(df, geometry=geometry)
     gdf.set_crs(epsg=4167, inplace=True)
@@ -518,7 +527,7 @@ if __name__ == "__main__":
     
     # Select by weight
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
-    heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
+    #heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
 
     """
     # Analyze the light vehicles
@@ -534,12 +543,12 @@ if __name__ == "__main__":
     # Filter based on missing value percentage
     Session = sessionmaker(bind=process_engine)
     session = Session()
-    
-    #filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
-    filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
-    filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
-    imputed_light_df = flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
     """
+    #filtered_meta_df = flow_missing_filter(flow_meta_df, light_merged_df, 30, process_engine)
+    #filtered_meta_query = 'SELECT * FROM filtered_flow_meta'
+    #filtered_meta_df = pd.read_sql(filtered_meta_query, process_engine)
+    #imputed_light_df = flow_data_imputation(filtered_meta_df, light_df, process_engine, False)
+    
     #session.commit()
     #session.close()
     ####################################################################################################
@@ -616,6 +625,7 @@ if __name__ == "__main__":
     """
     
     # Direction visualization cat plot
+    """
     sns.set_theme(style="whitegrid")
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_context("notebook", rc={"axes.titlesize":18, "axes.labelsize":18, "xtick.labelsize":16, "ytick.labelsize":16})
@@ -652,8 +662,8 @@ if __name__ == "__main__":
     ####################################################################################################
     # Weekday and weekend
     
-    light_df = imputed_light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
-    
+    #light_df = imputed_light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
+    """
     city_traffic_df = pd.DataFrame()
     city_traffic_df["DATETIME"] = time_index
     for iter in range(len(place_list)):
@@ -700,8 +710,10 @@ if __name__ == "__main__":
     fig.legend(handles, labels, loc='center right', bbox_to_anchor=(1.015, 0.5), frameon=False, fontsize=16)
     plt.savefig("./result/flow/weekday_weekend.png", dpi=600)
     plt.close()
+    """
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
+    """
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
     city_traffic_df = city_week_traffic_df
     
@@ -779,7 +791,8 @@ if __name__ == "__main__":
     plt.close()
     """
     
-    """
+    # Auckland
+
     # Weather data preparation
     weather_process_db_address = 'sqlite:///./data/NZDB_weather_process.db'
     weather_process_engine = create_engine(weather_process_db_address)
@@ -788,13 +801,13 @@ if __name__ == "__main__":
     weather_meta_query = 'SELECT * FROM filtered_weather_meta'
     weather_meta_df = pd.read_sql(weather_meta_query, weather_process_engine)
     weather_meta_gdf = df_to_gdf(weather_meta_df, "LON", "LAT")
-    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Auckland_shp.unary_union)]
+    auckland_weather_meta_gdf = weather_meta_gdf[weather_meta_gdf.geometry.within(Christchurch_shp.unary_union)]
     
     # Flow data preparation
     # Resample data to daily frequency and calculate max and mean
     daily_flow_df = pd.DataFrame()
     daily_flow_df["DATETIME"] = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 00:00:00", freq="D")
-    auckland_flow_meta_gdf = flow_meta_gdf[flow_meta_gdf.geometry.within(Auckland_shp.unary_union)]
+    auckland_flow_meta_gdf = flow_meta_gdf[flow_meta_gdf.geometry.within(Christchurch_shp.unary_union)]
     
     # Calculate the nearest flow station to weather station
     weather_coords = np.array(list(auckland_weather_meta_gdf.geometry.apply(lambda geom: (geom.x, geom.y))))
@@ -811,7 +824,11 @@ if __name__ == "__main__":
         auckland_weather_df = weather_df[weather_df["STATION_ID"] == weather_id]
         auckland_weather_df["DATETIME"] = pd.to_datetime(auckland_weather_df["DATETIME"])
         auckland_weather_df = auckland_weather_df[auckland_weather_df["DATETIME"].dt.year == 2019]
-        auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "DEWP", "RH", "PRCP", "MXSPD"]]
+        auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "DEWP", "RH", "PRCP"]]
+        auckland_weather_df = auckland_weather_df.rename(columns = {"TEMP":"Temperature(C)",
+                                                          "DEWP":"Dew Point(C)", 
+                                                          "RH":"Humidity(%)", 
+                                                          "PRCP":"Precipitation(m)"})
         auckland_weather_df = auckland_weather_df.groupby('DATETIME').mean().reset_index()
         auckland_weather_df = auckland_weather_df.astype(str)
         
@@ -823,8 +840,8 @@ if __name__ == "__main__":
         auckland_df = imputed_light_df[imputed_light_df["SITEREF"] == temp_siteref]
         auckland_df = auckland_df[["DATETIME", "TOTAL_FLOW"]]
         auckland_df.set_index('DATETIME', inplace=True)
-        daily_flow_df["MAX_FLOW"] = auckland_df['TOTAL_FLOW'].resample('D').max().to_list()
-        daily_flow_df["MEAN_FLOW"] = auckland_df['TOTAL_FLOW'].resample('D').mean().to_list()
+        #daily_flow_df["MAX_FLOW"] = auckland_df['TOTAL_FLOW'].resample('D').max().to_list()
+        daily_flow_df["Mean Traffic Flow"] = auckland_df['TOTAL_FLOW'].resample('D').mean().to_list()
         daily_flow_df = daily_flow_df.astype(str)
         
         correlation_df = pd.merge(auckland_weather_df, daily_flow_df, on='DATETIME', how='left')
@@ -865,8 +882,8 @@ if __name__ == "__main__":
         plt.close()
     ####################################################################################################
     # Extreme weather
-    holiday_extreme_df = pd.DataFrame()
-    holiday_extreme_df["DATETIME"] = time_index
+    event_df = pd.DataFrame()
+    event_df["DATETIME"] = time_index
 
     extreme_weather_query = 'SELECT * FROM extreme_weather'
     extreme_weather_df = pd.read_sql(extreme_weather_query, engine)
@@ -885,7 +902,7 @@ if __name__ == "__main__":
     extreme_weather_df = extreme_weather_df.drop(columns='START_DATE')
     
     # Merge
-    holiday_extreme_df = pd.merge(holiday_extreme_df, extreme_weather_df, on='DATETIME', how="left")
+    event_df = pd.merge(event_df, extreme_weather_df, on='DATETIME', how="left")
 
     # Holiday
     holiday_query = 'SELECT * FROM holiday'
@@ -904,46 +921,56 @@ if __name__ == "__main__":
     holiday_df = pd.merge(extended_holiday_df, holiday_df, on='START_DATE', how='left')
     holiday_df = holiday_df.drop(columns='START_DATE')
     
-    holiday_extreme_df = pd.merge(holiday_extreme_df, holiday_df, on=['DATETIME'], how="left")
-    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT_x'].combine_first(holiday_extreme_df['EVENT_y'])
-    holiday_extreme_df = holiday_extreme_df.drop(columns=['EVENT_x', 'EVENT_y'])
+    event_df = pd.merge(event_df, holiday_df, on=['DATETIME'], how="left")
+    event_df['EVENT'] = event_df['EVENT_x'].combine_first(event_df['EVENT_y'])
+    event_df = event_df.drop(columns=['EVENT_x', 'EVENT_y'])
     
+    auckland_df = pd.read_excel("./result/flow/city_mean.xlsx")
     auckland_df = auckland_df[["DATETIME", "Auckland"]]
-    holiday_extreme_df = pd.merge(holiday_extreme_df, auckland_df, on='DATETIME', how='left')
+    auckland_df['DATETIME'] = pd.to_datetime(auckland_df['DATETIME'])
+    event_df = pd.merge(event_df, auckland_df, on='DATETIME', how='left')
     
-    # Plot
-    holiday_extreme_df = holiday_extreme_df.fillna("None")
-    holiday_extreme_df = holiday_extreme_df.set_index("DATETIME")
+    event_df['Hour'] = event_df['DATETIME'].dt.strftime('%H:%M')
+    event_df['DayOfWeek'] = event_df['DATETIME'].dt.dayofweek
+    event_df['DayType'] = event_df['DayOfWeek'].apply(lambda x: 'Weekend' if x >= 5 else 'Weekday')
+    week_df = event_df[["DayType", "Hour", "Auckland"]]
+    week_df = week_df.groupby(['DayType', 'Hour']).mean().reset_index()
+    print(week_df)
+
+    event_df = event_df.fillna("None")
+    event_df = event_df.set_index("DATETIME")
     
-    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('August_2019_New_Zealand_Storm', 'Winter Storm')
-    holiday_extreme_df['EVENT'] = holiday_extreme_df['EVENT'].replace('December_2019_New_Zealand_Storm', 'Summer Storm')
+    event_df['EVENT'] = event_df['EVENT'].replace('August_2019_New_Zealand_Storm', 'Winter Storm')
+    event_df['EVENT'] = event_df['EVENT'].replace('December_2019_New_Zealand_Storm', 'Summer Storm')
     
+    # Plot, one annual
     event_colors = {
-                    "New Year's Day":                   '#5a189a', 
+                    #"New Year's Day":                   '#5a189a', 
                     "Day after New Year's Day":         '#7b2cbf', 
                     'Regional anniversary':             '#00a6fb',
-                    'Waitangi Day':                     '#003049',
+                    #'Waitangi Day':                     '#003049',
                     'Good Friday':                      '#e09f3e',
-                    'Easter Monday':                    '#31572c',
-                    'ANZAC Day':                        '#3c6e71',
-                    "Queen's Birthday":                 '#ff7d00',
+                    #'Easter Monday':                    '#31572c',
+                    #'ANZAC Day':                        '#3c6e71',
+                    #"Queen's Birthday":                 '#ff7d00',
                     'Winter Storm':                     '#bd1f36',
-                    'Labour Day':                       '#b08968',
-                    'Summer Storm':                     '#85182a',
+                    #'Labour Day':                       '#b08968',
+                    #'Summer Storm':                     '#85182a',
                     "Christmas Day":                    '#240046',
                     "Boxing Day":                       '#3c096c',
                     'None':                             "#FFFFFF"}
     
+    """
     fig, ax = plt.subplots(figsize=(26, 14), layout='constrained')
     ax.tick_params(axis='both', which='major', labelsize=22)
-    ax.plot(holiday_extreme_df.index, holiday_extreme_df['Auckland'], color='#274c77')
+    ax.plot(event_df.index, event_df['Auckland'], color='#274c77')
 
     matplotlib.rc('xtick', labelsize=22)
     matplotlib.rc('ytick', labelsize=22)
     plt.rc('legend', fontsize=22)
     
     for event, color in event_colors.items():
-        subset = holiday_extreme_df[holiday_extreme_df["EVENT"] == event]
+        subset = event_df[event_df["EVENT"] == event]
         print(event)
         
         if not subset.empty:
@@ -973,7 +1000,7 @@ if __name__ == "__main__":
                         ax.axvspan(group_df.index[0], group_df.index[-1], facecolor=color, alpha=0.5, edgecolor='none')
                         df_num = df_num + 1
     
-    ax.set_xlim(holiday_extreme_df.index.min(), holiday_extreme_df.index.max())
+    ax.set_xlim(event_df.index.min(), event_df.index.max())
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
     ax.set(xlabel="", ylabel="")
     plt.xlabel("Time", fontsize=22)
@@ -983,15 +1010,17 @@ if __name__ == "__main__":
     
     plt.savefig("./result/event/events.png", dpi=600)
     plt.close()
+    """
 
+    # Subplot
     alphabet_list = [chr(chNum) for chNum in list(range(ord('a'),ord('z')+1))]
-    fig, axs = plt.subplots(5, 3, figsize=(18, 20))
+    fig, axs = plt.subplots(2, 3, figsize=(24, 12))
     # Flatten the axes array for easy iteration
     axs = axs.flatten()
     
     event_num = 0
     for event, color in event_colors.items():
-        subset = holiday_extreme_df[holiday_extreme_df["EVENT"] == event]
+        subset = event_df[event_df["EVENT"] == event]
         print(event)
         
         if event == "None":
@@ -1023,39 +1052,53 @@ if __name__ == "__main__":
             if dfs:
                 ax = axs[event_num]
                 
-                extreme_df = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time) & (holiday_extreme_df.index <= end_time)]
-                extreme_df_before = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time - pd.Timedelta(days=1)) & 
-                (holiday_extreme_df.index <= end_time - pd.Timedelta(days=1))]
+                extreme_df = event_df.loc[(event_df.index >= start_time) & (event_df.index < end_time)]
+                
+                extreme_df_before = event_df.loc[(event_df.index >= start_time - pd.Timedelta(days=1)) & 
+                (event_df.index <= end_time - pd.Timedelta(days=1))]
                 extreme_df_before = extreme_df_before.shift(freq="24H")
-                extreme_df_after = holiday_extreme_df.loc[(holiday_extreme_df.index >= start_time + pd.Timedelta(days=1)) & 
-                (holiday_extreme_df.index <= end_time + pd.Timedelta(days=1))]
+                
+                extreme_df_week_before = event_df.loc[(event_df.index >= start_time - pd.Timedelta(days=7)) & 
+                (event_df.index <= end_time - pd.Timedelta(days=7))]
+                extreme_df_week_before = extreme_df_week_before.shift(freq="168H")
+
+                extreme_df_after = event_df.loc[(event_df.index >= start_time + pd.Timedelta(days=1)) & 
+                (event_df.index <= end_time + pd.Timedelta(days=1))]
                 extreme_df_after = extreme_df_after.shift(freq="-24H")
                 
                 if event_num == 0:
-                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b", label="Event")
+                    #ax.plot(extreme_df.index, week_df[week_df['DayType'] == 'Weekday']["Auckland"], color='blue', linestyle='--', label='Weekday Average')
+                    #ax.plot(extreme_df.index, week_df[week_df['DayType'] == 'Weekend']["Auckland"], color='green', linestyle='--', label='Weekend Average')
                     ax.plot(extreme_df_before.index, extreme_df_before['Auckland'], color='#274c77', label="Previous Day")
                     ax.plot(extreme_df_after.index, extreme_df_after['Auckland'], color='#fca311', label="Next Day")
+                    ax.plot(extreme_df_week_before.index, extreme_df_week_before['Auckland'], color='#000000', label="Same Day Last Week")
+                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b", label="Event")
                 else:
-                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b")
+                    #ax.plot(extreme_df.index, week_df[week_df['DayType'] == 'Weekday']["Auckland"], color='blue', linestyle='--')
+                    #ax.plot(extreme_df.index, week_df[week_df['DayType'] == 'Weekend']["Auckland"], color='green', linestyle='--')
                     ax.plot(extreme_df_before.index, extreme_df_before['Auckland'], color='#274c77')
                     ax.plot(extreme_df_after.index, extreme_df_after['Auckland'], color='#fca311')
+                    ax.plot(extreme_df_week_before.index, extreme_df_week_before['Auckland'], color='#000000')
+                    ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b")
                 
                 ax.set_title(alphabet_list[event_num] + ") " + event, fontsize=20)
                 ax.set_xlim(extreme_df.index.min(), extreme_df.index.max())
                 ax.tick_params(axis='both', which='major', labelsize=20)
                 ax.set_xticklabels(ax.get_xticklabels(), rotation=45) 
                 ax.set(xlabel="", ylabel="")
-                
+        
                 event_num = event_num + 1
-  
+
+        
     # Hide the empty subplots
-    for ax in axs[13:]:
+    for ax in axs[6:]:
         ax.axis('off')
 
-    fig.legend(loc='lower right', fontsize=20, bbox_to_anchor=(0.5, 0.11))
+    #fig.legend(loc='outside center right', )
     # Adjust layout
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.05, 0.85, 1])
+    fig.legend(loc='center right', bbox_to_anchor=(1.0, 0.5), frameon=False, fontsize=20)
     # Show the plot
     plt.savefig("./result/event/event_sub_all.png", dpi=600)
     plt.close()
-    """
+
