@@ -675,7 +675,8 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
         auckland_weather_df = auckland_weather_df.rename(columns = {"TEMP":"Temperature(C)",
                                                           #"DEWP":"Dew Point(C)", 
                                                           "RH":"Humidity(%)", 
-                                                          "PRCP":"Precipitation(m)"})
+                                                          #"PRCP":"Precipitation(m)"
+                                                          })
         auckland_weather_df = auckland_weather_df.groupby('DATETIME').mean().reset_index()
         auckland_weather_df = auckland_weather_df.astype(str)
         
@@ -964,10 +965,12 @@ def direction_line_visualization(place_list, flow_meta_list, flow_df, output_pat
         axes[i].set_xlim(plot_df.HOUR.min(), plot_df.HOUR.max())
         axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
         if i == 1:
-            axes[i].set_xlabel(place_list[i] + "\n" + "Time of the day (hour)", fontsize=18)
+            axes[i].set_xlabel("(b) " + place_list[i] + "\n" + "Time of the day (hour)", fontsize=18)
+        elif i == 0:
+            axes[i].set_xlabel("(a) " + place_list[i], fontsize=18)
         else:
-            axes[i].set_xlabel(place_list[i], fontsize=18)
-        
+            axes[i].set_xlabel("(c) " + place_list[i], fontsize=18)
+            
         legend = axes[i].get_legend()
         if legend:
             for text in legend.get_texts():
@@ -1005,11 +1008,12 @@ if __name__ == "__main__":
 
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-    """
+
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     ####################################################################################################
     # Process the data to obtain proportion instead of analyzing the direction
+    """
     total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].mean().reset_index()
     total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
@@ -1084,8 +1088,7 @@ if __name__ == "__main__":
     #direction_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     
     # Direction visualization cat plot
-    flow_df = pd.DataFrame()
-    direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    #direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     
     # Weight proportion visualization
     print("Weight proportion stack")
@@ -1093,7 +1096,7 @@ if __name__ == "__main__":
     
     # Direction visualization lineplot
     print("Direction lineplot")
-    #direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     ####################################################################################################
     # Weekday and weekend
     """
