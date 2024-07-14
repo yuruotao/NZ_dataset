@@ -544,29 +544,38 @@ def direction_visualization(place_list, flow_meta_list, flow_df, output_path):
     return
     
 def direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path):
+    
     sns.set_theme(style="whitegrid")
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_context("notebook", rc={"axes.titlesize":18, "axes.labelsize":18, "xtick.labelsize":16, "ytick.labelsize":16})
     mpl.rcParams['font.family'] = 'Times New Roman'
     region_palette = {"Wellington":'#fca311', "Christchurch":'#0466c8', "Auckland":'#c1121f'}
     
-    cat_df = pd.DataFrame()
-    for iter in range(len(place_list)):
-        place = place_list[iter]
-        temp_flow_meta_gdf = flow_meta_list[iter]
-        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
-        temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
-        temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
-        temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.hour
-        temp_flow_df["REGION"] = place
-        temp_flow_df = temp_flow_df.fillna(value=np.nan)
-        cat_df = pd.concat([cat_df, temp_flow_df], axis=0)
+    if False:
+        cat_df = pd.DataFrame()
+        for iter in range(len(place_list)):
+            place = place_list[iter]
+            temp_flow_meta_gdf = flow_meta_list[iter]
+            temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+            temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
+            temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
+            temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.hour
+            temp_flow_df["REGION"] = place
+            temp_flow_df = temp_flow_df.fillna(value=np.nan)
+            temp_flow_df = temp_flow_df.reset_index(drop=True)
+            cat_df = pd.concat([cat_df, temp_flow_df], axis=0)
+        
+        cat_df.to_excel("./haha.xlsx", index=False)
     
+    cat_df = pd.read_excel("./haha.xlsx")
+    
+
     g = sns.catplot(
-        data=cat_df, x="HOUR", y="PROPORTION", hue="REGION", col="WEIGHT",
+        data=cat_df, x="HOUR", y="FLOW", hue="REGION", col="WEIGHT",
         capsize=.1, palette=region_palette, errorbar="se", hue_order=place_list,
-        kind="point", legend_out=True)
-    
+        kind="point", legend_out=True, )
+
+        
     for ax in g.axes.flat:
         x_ticks = ax.get_xticks()
         ax.set_xticks(x_ticks[::2])  # Show every other tick
@@ -574,7 +583,7 @@ def direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path
     
     g.despine(left=True)
     
-    plt.savefig(output_path + "proportion_cat.png", dpi=600)
+    plt.savefig(output_path + "flow_cat.png", dpi=600)
     plt.close()
     
     return
@@ -988,7 +997,7 @@ if __name__ == "__main__":
 
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-
+    """
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     ####################################################################################################
@@ -1009,7 +1018,7 @@ if __name__ == "__main__":
     
     # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
-    
+    """
     # Select light vehicles for analysis
     """
     light_pivot_df = temp_light_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
@@ -1067,7 +1076,8 @@ if __name__ == "__main__":
     #direction_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     
     # Direction visualization cat plot
-    #direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    flow_df = pd.DataFrame()
+    direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     
     # Weight proportion visualization
     print("Weight proportion stack")
@@ -1075,7 +1085,7 @@ if __name__ == "__main__":
     
     # Direction visualization lineplot
     print("Direction lineplot")
-    direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    #direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     ####################################################################################################
     # Weekday and weekend
     """
