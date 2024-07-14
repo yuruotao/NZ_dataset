@@ -682,7 +682,7 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
         # Plot the correlation
         matplotlib.rc('xtick', labelsize=24)
         matplotlib.rc('ytick', labelsize=24)
-        mpl.rcParams["axes.labelsize"] = 24
+        mpl.rcParams["axes.labelsize"] = 20
         plt.rc('legend', fontsize=24)
         
         def corrfunc(x, y, **kwds):
@@ -715,10 +715,10 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
             
             # Adjust label size for all axes
             for ax in g.axes.flatten():
-                ax.tick_params(axis='both', which='major', labelsize=22)
-                ax.get_yaxis().set_label_coords(-0.2,0.5)
+                ax.tick_params(axis='both', which='major', labelsize=20)
+                ax.get_yaxis().set_label_coords(-0.35, 0.5)
             
-            plt.tight_layout()
+            plt.tight_layout(rect=[0.05, 0, 1, 1])
             plt.savefig(output_path + "correlation_" + weather_id + "_" + str(i) + ".png", dpi=600)
             plt.close()
 
@@ -875,9 +875,7 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_theme(style="white")
     mpl.rcParams['font.family'] = 'Times New Roman'
-    
-    flow_df = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].sum().reset_index()
-    
+
     plot_df_list = []
     for iter in range(len(place_list)):
         temp_flow_meta_gdf = flow_meta_list[iter]
@@ -890,12 +888,12 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
         plot_df_list.append(temp_flow_df)
     
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
-    region_palette = {"Wellington":['#fca311', "#ee6c4d"], "Christchurch":['#0466c8', "#0077b6"], "Auckland":["#880d1e", '#bf0603']}
+    region_palette = {"Wellington":['#fca311', "#ee6c4d"], "Christchurch":['#03045e', "#0077b6"], "Auckland":["#880d1e", '#bf0603']}
     
     for i in range(len(place_list)):
         palette = region_palette.get(place_list[i])
         plot_df = plot_df_list[i]
-        sns.histplot(data=plot_df, x="HOUR", weights="FLOW", hue="WEIGHT", multiple="stack", ax=axes[i], palette=palette)
+        sns.histplot(data=plot_df, x="HOUR", weights="FLOW", hue="WEIGHT", multiple="stack", ax=axes[i], palette=palette, hue_order=["Light", "Heavy"])
         axes[i].tick_params(axis='both', which='major', labelsize=18)
         axes[i].set_xlim(plot_df.HOUR.min(), plot_df.HOUR.max())
         axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -904,7 +902,7 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
         else:
             axes[i].set_xlabel(place_list[i], fontsize=18)
         
-        legend = axes[i].legend()
+        legend = axes[i].get_legend()
         if legend:
             for text in legend.get_texts():
                 text.set_fontsize(18)  # Set legend text fontsize
@@ -921,6 +919,7 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
 
 def direction_line_visualization(place_list, flow_meta_list, flow_df, output_path):
     
+    flow_df = flow_df.groupby(['SITEREF', 'DATETIME', 'DIRECTION'])['FLOW'].sum().reset_index()
     
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_theme(style="white")
@@ -933,44 +932,37 @@ def direction_line_visualization(place_list, flow_meta_list, flow_df, output_pat
         temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
         temp_flow_df = temp_flow_df.fillna(value=np.nan)
         temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.strftime('%H:%M')
-        temp_flow_df = temp_flow_df[["HOUR", "WEIGHT", "FLOW"]]
-        temp_flow_df = temp_flow_df.groupby(['HOUR', 'WEIGHT']).mean().reset_index()
+        temp_flow_df = temp_flow_df[["HOUR", "FLOW", "DIRECTION"]]
+        temp_flow_df = temp_flow_df.groupby(['HOUR', 'DIRECTION']).mean().reset_index()
         plot_df_list.append(temp_flow_df)
     
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
-    region_palette = {"Wellington":['#fca311', "#ee6c4d"], "Christchurch":['#0466c8', "#0077b6"], "Auckland":["#880d1e", '#bf0603']}
+    region_palette = {"Wellington":['#fca311', "#ee6c4d"], "Christchurch":['#03045e', "#0077b6"], "Auckland":["#880d1e", '#bf0603']}
     
+    for i in range(len(place_list)):
+        palette = region_palette.get(place_list[i])
+        plot_df = plot_df_list[i]
+        sns.histplot(data=plot_df, x="HOUR", weights="FLOW", hue="DIRECTION", multiple="stack", ax=axes[i], palette=palette)
+        axes[i].tick_params(axis='both', which='major', labelsize=18)
+        axes[i].set_xlim(plot_df.HOUR.min(), plot_df.HOUR.max())
+        axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
+        if i == 1:
+            axes[i].set_xlabel(place_list[i] + "\n" + "Time of the day (hour)", fontsize=18)
+        else:
+            axes[i].set_xlabel(place_list[i], fontsize=18)
+        
+        legend = axes[i].get_legend()
+        if legend:
+            for text in legend.get_texts():
+                text.set_fontsize(18)  # Set legend text fontsize
     
+    axes[0].set_ylabel('Traffic Flow', fontsize=18)
     
-    
-    cat_df = pd.DataFrame()
-    for iter in range(len(place_list)):
-        place = place_list[iter]
-        temp_flow_meta_gdf = flow_meta_list[iter]
-        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
-        temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
-        temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
-        temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.hour
-        temp_flow_df["REGION"] = place
-        temp_flow_df = temp_flow_df.fillna(value=np.nan)
-        cat_df = pd.concat([cat_df, temp_flow_df], axis=0)
-    
-    g = sns.catplot(
-        data=cat_df, x="HOUR", y="PROPORTION", hue="REGION", col="WEIGHT",
-        capsize=.1, palette=region_palette, errorbar="se", hue_order=place_list,
-        kind="point", legend_out=True)
-    
-    for ax in g.axes.flat:
-        x_ticks = ax.get_xticks()
-        ax.set_xticks(x_ticks[::2])  # Show every other tick
-        ax.set_xticklabels(x_ticks[::2])
-    
-    g.despine(left=True)
-    
-    plt.savefig(output_path + "proportion_cat.png", dpi=600)
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 1])
+    # Show the plot
+    plt.savefig(output_path + "direction_stack.png", dpi=600)
     plt.close()
-    
-    
     
     return
 
@@ -1001,24 +993,22 @@ if __name__ == "__main__":
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     ####################################################################################################
     # Process the data to obtain proportion instead of analyzing the direction
-    """
-    total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].sum().reset_index()
+    total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].mean().reset_index()
     total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
-    flow_df = flow_df.merge(total_flow, on=['SITEREF', 'DATETIME', 'WEIGHT'])
-    flow_df['PROPORTION'] = flow_df['FLOW'] / flow_df['TOTAL_FLOW']
+    proportion_flow_df = pd.merge(flow_df, total_flow, on=['SITEREF', 'DATETIME', 'WEIGHT'])
+    proportion_flow_df['PROPORTION'] = proportion_flow_df['FLOW'] / proportion_flow_df['TOTAL_FLOW']
     
     # Filter out the rows with proportion higher than 50%, row PROPORTION is the imbalance
-    flow_df = flow_df[flow_df['PROPORTION'] > 0.5]
-    flow_df = flow_df.drop(columns=['DIRECTION'])
+    proportion_flow_df = proportion_flow_df[proportion_flow_df['PROPORTION'] > 0.5]
+    proportion_flow_df = proportion_flow_df.drop(columns=['DIRECTION'])
     
     # Select by weight
-    light_df = flow_df[flow_df['WEIGHT'] == "Light"]
+    light_df = proportion_flow_df[proportion_flow_df['WEIGHT'] == "Light"]
     #heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
     
     # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
-    """
     
     # Select light vehicles for analysis
     """
@@ -1085,7 +1075,7 @@ if __name__ == "__main__":
     
     # Direction visualization lineplot
     print("Direction lineplot")
-    #direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     ####################################################################################################
     # Weekday and weekend
     """
@@ -1143,8 +1133,8 @@ if __name__ == "__main__":
 
     light_df = light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
     weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
-    weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df, auckland_weather_meta_gdf, 
-                                      auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
+    #weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df, auckland_weather_meta_gdf, 
+    #                                  auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
 
     ####################################################################################################
     # Extreme weather
