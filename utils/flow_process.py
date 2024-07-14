@@ -568,18 +568,26 @@ def direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path
         cat_df.to_excel("./haha.xlsx", index=False)
     
     cat_df = pd.read_excel("./haha.xlsx")
-    
+    cat_df = cat_df.rename({"FLOW":"Traffic Flow"})
 
     g = sns.catplot(
         data=cat_df, x="HOUR", y="FLOW", hue="REGION", col="WEIGHT",
         capsize=.1, palette=region_palette, errorbar="se", hue_order=place_list,
         kind="point", legend_out=True, )
 
-        
-    for ax in g.axes.flat:
+    for axis in range(len(g.axes.flat)):
+        ax = g.axes.flat[axis]
         x_ticks = ax.get_xticks()
         ax.set_xticks(x_ticks[::2])  # Show every other tick
         ax.set_xticklabels(x_ticks[::2])
+        
+        if axis == 0:
+            ax.set_xlabel("(a) Traffic flow of light duty vehicles")
+            ax.set_ylabel("Traffic Flow")
+            ax.set_title("")
+        else:
+            ax.set_xlabel("(b) Traffic flow of heavy duty vehicles")
+            ax.set_title("")
     
     g.despine(left=True)
     
