@@ -871,6 +871,7 @@ if __name__ == "__main__":
 
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
+    """
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     ####################################################################################################
@@ -889,14 +890,16 @@ if __name__ == "__main__":
     light_df = flow_df[flow_df['WEIGHT'] == "Light"]
     #heavy_df = flow_df[flow_df['WEIGHT'] == "Heavy"]
 
-    """
+    
     # Analyze the light vehicles
     temp_light_flow_df = light_df[["DATETIME", "SITEREF", "FLOW"]]
+    """
     
     # Select light vehicles for analysis
+    """
     light_pivot_df = temp_light_flow_df.pivot(index='DATETIME', columns='SITEREF', values='FLOW')
     light_merged_df = datetime_df.merge(light_pivot_df, on='DATETIME', how='left')
-
+    
     # Visualize the missing data
     #flow_missing_data_visualization(light_merged_df, "./result/flow/missing")
     
@@ -921,13 +924,13 @@ if __name__ == "__main__":
     for method in imputation_methods:
         imputed_df = imputation(station_df, save_path="./result/flow/imputation", imputation_method=method)
         imputed_df = pd.read_excel("./result/flow/imputation/imputed_data_" + method + ".xlsx")
+    """
     
     station_df = pd.read_excel("./result/flow/imputation/raw.xlsx")
-    imputation_visualization(station_df, '2019-12-10 00:00:00', '2019-12-17 00:00:00', 
+    imputation_visualization(station_df, '2019-12-10 00:00:00', '2019-12-13 00:00:00', 
                                         ["Linear", "Forward", "Backward", "Forward-Backward"],
                                         "00200091",
                                         "./result/flow/imputation/")
-    """
     ####################################################################################################
     # Weight-percentage analysis
     # 047-Wellington 060-Christchurch 076-Auckland
@@ -973,7 +976,7 @@ if __name__ == "__main__":
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
-    morning_afternoon_peak_visualization(city_week_traffic_df, "./result/flow/")
+    #morning_afternoon_peak_visualization(city_week_traffic_df, "./result/flow/")
     ####################################################################################################
     # Weather correlation
     # Auckland
@@ -1004,8 +1007,8 @@ if __name__ == "__main__":
     
     light_df = light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
     weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
-    weather_correlation_visualization(weather_id_list, weather_df, auckland_weather_meta_gdf, 
-                                      auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
+    #weather_correlation_visualization(weather_id_list, weather_df, auckland_weather_meta_gdf, 
+    #                                  auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
     ####################################################################################################
     # Extreme weather
     event_df = pd.DataFrame()
