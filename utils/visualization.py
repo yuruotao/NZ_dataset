@@ -137,13 +137,13 @@ def city_distribution_visualization(city_name, highway_shp, flow_meta_gdf, weath
     ax.axis('off')
     
     highway_shp = gpd.overlay(highway_shp, boundary_main_shp, how='intersection')
-    highway_shp.plot(ax=ax, color='#000000', linewidth=1, aspect="equal", zorder=1)
+    highway_shp.plot(ax=ax, color='#000000', linewidth=4, aspect="equal", zorder=1)
     
     for index, row in flow_meta_gdf.iterrows():
-        ax.scatter(row.geometry.x, row.geometry.y, s=15, color='#a4161a', linewidths=0.1, edgecolor='#000000', alpha=1)
+        ax.scatter(row.geometry.x, row.geometry.y, s=60, color='#a4161a', linewidths=0.1, edgecolor='#000000', alpha=1)
     
     for index, row in weather_meta_gdf.iterrows():
-        ax.scatter(row.geometry.x, row.geometry.y, s=15, color='#fca311', linewidths=0.1, edgecolor='#000000', alpha=1)
+        ax.scatter(row.geometry.x, row.geometry.y, s=60, color='#fca311', linewidths=0.1, edgecolor='#000000', alpha=1)
     
     plt.savefig(output_path + "distribution_" + city_name + ".png", dpi=900)
     plt.close()
