@@ -596,7 +596,7 @@ def direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path
     
     return
 
-def city_traffic_visualization(city_week_traffic_df, output_path):
+def city_traffic_visualization(place_list, city_week_traffic_df, output_path):
     
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_theme(style="white")
@@ -605,14 +605,16 @@ def city_traffic_visualization(city_week_traffic_df, output_path):
     city_week_traffic_df['Hour'] = city_week_traffic_df['DATETIME'].dt.strftime('%H:%M')
     city_week_traffic_df['DayOfWeek'] = city_week_traffic_df['DATETIME'].dt.dayofweek
     city_week_traffic_df['DayType'] = city_week_traffic_df['DayOfWeek'].apply(lambda x: 'Weekend' if x >= 5 else 'Weekday')
-    week_df = city_week_traffic_df.groupby(['DayType', 'Hour']).mean().reset_index()
+    city_week_traffic_df = city_week_traffic_df[["Wellington", "Christchurch", "Auckland", "DayType", "Hour"]]
+    #week_df = city_week_traffic_df.groupby(['DayType', 'Hour']).mean().reset_index()
+    week_df = city_week_traffic_df
     
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
     region_palette = {"Wellington":'#fca311', "Christchurch":'#0466c8', "Auckland":'#c1121f'}
     
     for col_name in place_list:
-        sns.lineplot(x='Hour', y=col_name, data=week_df[week_df['DayType'] == 'Weekday'], ax=axes[0], linewidth=2.5, color=region_palette.get(col_name))
-        sns.lineplot(x='Hour', y=col_name, data=week_df[week_df['DayType'] == 'Weekend'], ax=axes[1], linewidth=2.5, color=region_palette.get(col_name))
+        sns.lineplot(x='Hour', y=col_name, errorbar=("pi", 50), data=week_df[week_df['DayType'] == 'Weekday'], ax=axes[0], linewidth=2.5, color=region_palette.get(col_name))
+        sns.lineplot(x='Hour', y=col_name, errorbar=("pi", 50), data=week_df[week_df['DayType'] == 'Weekend'], ax=axes[1], linewidth=2.5, color=region_palette.get(col_name))
 
     for i in range(2):
         axes[i].tick_params(axis='both', which='major', labelsize=16)
@@ -636,6 +638,10 @@ def city_traffic_visualization(city_week_traffic_df, output_path):
     return
     
 def morning_afternoon_peak_visualization(city_traffic_df, output_path):
+    
+    sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
+    sns.set_theme(style="white")
+    mpl.rcParams['font.family'] = 'Times New Roman'
     
     auckland_df = city_traffic_df[["DATETIME", "Auckland"]]
     auckland_df['DATETIME'] = pd.to_datetime(auckland_df['DATETIME'])
@@ -671,7 +677,7 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
         auckland_weather_df = weather_df[weather_df["STATION_ID"] == weather_id]
         auckland_weather_df["DATETIME"] = pd.to_datetime(auckland_weather_df["DATETIME"])
         auckland_weather_df = auckland_weather_df[auckland_weather_df["DATETIME"].dt.year == 2019]
-        auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "RH", "PRCP"]]
+        auckland_weather_df = auckland_weather_df[["DATETIME", "TEMP", "RH", ]]
         auckland_weather_df = auckland_weather_df.rename(columns = {"TEMP":"Temperature(C)",
                                                           #"DEWP":"Dew Point(C)", 
                                                           "RH":"Humidity(%)", 
@@ -718,6 +724,8 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
                     color='white' if lightness < 0.7 else 'black', size=28, ha='center', va='center')
         
         for i in range(2):
+            g = sns.PairGrid(correlation_df)
+            """
             if i == 0: # With precipitation
                 temp_correlation_df = correlation_df[correlation_df["Precipitation(m)"] == 0]
                 temp_correlation_df = temp_correlation_df.drop(["Precipitation(m)"], axis=1)
@@ -726,7 +734,8 @@ def weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df
             else:
                 temp_correlation_df = correlation_df[correlation_df["Precipitation(m)"] > 0]
                 g = sns.PairGrid(temp_correlation_df)
-
+            """
+            
             g.map_lower(plt.scatter, s=22)
             g.map_diag(sns.histplot, kde=False)
             g.map_upper(corrfunc, cmap=plt.get_cmap('crest'), norm=plt.Normalize(vmin=0, vmax=1))
@@ -865,9 +874,9 @@ def event_subplot_visualization(event_colors, event_df, output_path):
                     ax.plot(extreme_df_week_before.index, extreme_df_week_before['Auckland'], color='#000000', linewidth=2.5)
                     ax.plot(extreme_df.index, extreme_df['Auckland'], color="#ba181b", linewidth=2.5)
                 
-                ax.set_title("(" + alphabet_list[event_num] + ") " + event, fontsize=24)
+                ax.set_title("(" + alphabet_list[event_num] + ") " + event, fontsize=28)
                 ax.set_xlim(extreme_df.index.min(), extreme_df.index.max())
-                ax.tick_params(axis='both', which='major', labelsize=24)
+                ax.tick_params(axis='both', which='major', labelsize=28)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
                 ax.set_xticklabels(ax.get_xticklabels(), rotation=45) 
                 ax.set(xlabel="", ylabel="")
@@ -881,9 +890,9 @@ def event_subplot_visualization(event_colors, event_df, output_path):
     # Adjust layout
     plt.tight_layout(rect=[0.02, 0.05, 1, 1])
     # Add ylabel to the entire figure
-    fig.text(0.004, 0.5, 'Traffic Flow', va='center', rotation='vertical', fontsize=24)
+    fig.text(0.004, 0.5, 'Traffic Flow', va='center', rotation='vertical', fontsize=28)
     
-    fig.legend(loc='lower center', ncol=4, frameon=False, fontsize=24)
+    fig.legend(loc='lower center', ncol=4, frameon=False, fontsize=28)
     # Show the plot
     plt.savefig(output_path + "event_sub_all.png", dpi=600)
     plt.close()
@@ -916,16 +925,18 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
         axes[i].set_xlim(plot_df.HOUR.min(), plot_df.HOUR.max())
         axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
         if i == 1:
-            axes[i].set_xlabel(place_list[i] + "\n" + "Time of the day (hour)", fontsize=18)
+            axes[i].set_xlabel("(b) " + place_list[i] + "\n" + "Time of the day (hour)", fontsize=22)
+        elif i == 0:
+            axes[i].set_xlabel("(a) " + place_list[i], fontsize=22)
         else:
-            axes[i].set_xlabel(place_list[i], fontsize=18)
+            axes[i].set_xlabel("(c) " + place_list[i], fontsize=22)
         
         legend = axes[i].get_legend()
         if legend:
             for text in legend.get_texts():
-                text.set_fontsize(18)  # Set legend text fontsize
+                text.set_fontsize(22)  # Set legend text fontsize
     
-    axes[0].set_ylabel('Traffic Flow', fontsize=18)
+    axes[0].set_ylabel('Traffic Flow', fontsize=22)
     
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 1])
@@ -961,22 +972,22 @@ def direction_line_visualization(place_list, flow_meta_list, flow_df, output_pat
         palette = region_palette.get(place_list[i])
         plot_df = plot_df_list[i]
         sns.histplot(data=plot_df, x="HOUR", weights="FLOW", hue="DIRECTION", multiple="stack", ax=axes[i], palette=palette)
-        axes[i].tick_params(axis='both', which='major', labelsize=18)
+        axes[i].tick_params(axis='both', which='major', labelsize=22)
         axes[i].set_xlim(plot_df.HOUR.min(), plot_df.HOUR.max())
         axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
         if i == 1:
-            axes[i].set_xlabel("(b) " + place_list[i] + "\n" + "Time of the day (hour)", fontsize=18)
+            axes[i].set_xlabel("(b) " + place_list[i] + "\n" + "Time of the day (hour)", fontsize=22)
         elif i == 0:
-            axes[i].set_xlabel("(a) " + place_list[i], fontsize=18)
+            axes[i].set_xlabel("(a) " + place_list[i], fontsize=22)
         else:
-            axes[i].set_xlabel("(c) " + place_list[i], fontsize=18)
+            axes[i].set_xlabel("(c) " + place_list[i], fontsize=22)
             
         legend = axes[i].get_legend()
         if legend:
             for text in legend.get_texts():
-                text.set_fontsize(18)  # Set legend text fontsize
+                text.set_fontsize(22)  # Set legend text fontsize
     
-    axes[0].set_ylabel('Traffic Flow', fontsize=18)
+    axes[0].set_ylabel('Traffic Flow', fontsize=22)
     
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 1])
@@ -1008,12 +1019,12 @@ if __name__ == "__main__":
 
     # If RAM is limited, create a new database with only desired time range
     siteRef_list = flow_meta_df["SITEREF"].to_list()
-
+    """
     flow_df = traffic_flow_import_19("./data/traffic/flow_data_13_20/", siteRef_list, process_engine, False)
     flow_df = flow_df.astype({"DATETIME":"datetime64[ms]"})
     ####################################################################################################
     # Process the data to obtain proportion instead of analyzing the direction
-    """
+
     total_flow = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].mean().reset_index()
     total_flow = total_flow.rename(columns={'FLOW': 'TOTAL_FLOW'})
     
@@ -1096,7 +1107,7 @@ if __name__ == "__main__":
     
     # Direction visualization lineplot
     print("Direction lineplot")
-    direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
+    #direction_line_visualization(place_list, flow_meta_list, flow_df, output_path="./result/flow/")
     ####################################################################################################
     # Weekday and weekend
     """
@@ -1117,7 +1128,7 @@ if __name__ == "__main__":
     """
     print("Weekdays and weekends")
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
-    #city_traffic_visualization(city_week_traffic_df, "./result/flow/")
+    city_traffic_visualization(place_list, city_week_traffic_df, "./result/flow/")
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
     print("Morning afternoon peak")
@@ -1151,12 +1162,12 @@ if __name__ == "__main__":
     distances, indices = tree.query(weather_coords, k=1)
     nearest_siteref = auckland_flow_meta_gdf.iloc[indices]['SITEREF'].values
     auckland_weather_meta_gdf['NEAREST'] = nearest_siteref
-
+    """
     light_df = light_df[["DATETIME", "SITEREF", "TOTAL_FLOW"]]
     weather_id_list = auckland_weather_meta_gdf["STATION_ID"].to_list()
-    #weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df, auckland_weather_meta_gdf, 
-    #                                  auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
-
+    weather_correlation_visualization(daily_flow_df, weather_id_list, weather_df, auckland_weather_meta_gdf, 
+                                      auckland_flow_meta_gdf, light_df, process_engine, "./result/weather/")
+    """
     ####################################################################################################
     # Extreme weather
     print("Events")
