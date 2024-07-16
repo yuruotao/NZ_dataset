@@ -90,7 +90,7 @@ def traffic_flow_import_19(input_path, siteRef_list, engine, commit_flag):
     df = pd.DataFrame()
     for file in traffic_flow_list:
         print(file)
-        if "201901" in file:
+        if "2019" in file:
             temp_df = pd.read_csv(input_path + file)
             # class siteRef startDatetime endDatetime direction count
             temp_df["siteRef"] = temp_df["siteRef"].apply(lambda x: str(x).zfill(8))
@@ -545,57 +545,83 @@ def direction_visualization(place_list, flow_meta_list, flow_df, output_path):
     plt.close()
     
     return
-    
+
 def direction_cat_visualization(place_list, flow_meta_list, flow_df, output_path):
     
-    sns.set_theme(style="whitegrid")
+    sns.set_theme(style="white")
     sns.set_style({'font.family':'serif', 'font.serif':'Times New Roman'})
     sns.set_context("notebook", rc={"axes.titlesize":10.5, "axes.labelsize":10.5, "xtick.labelsize":10.5, "ytick.labelsize":10.5})
     mpl.rcParams['font.family'] = 'Times New Roman'
     region_palette = {"Wellington":'#fca311', "Christchurch":'#0466c8', "Auckland":'#c1121f'}
     
-    if False:
-        cat_df = pd.DataFrame()
-        for iter in range(len(place_list)):
-            place = place_list[iter]
-            temp_flow_meta_gdf = flow_meta_list[iter]
-            temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
-            temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
-            temp_flow_df = temp_flow_df.sort_values(by=['WEIGHT'], ascending=False)
-            temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.hour
-            temp_flow_df["REGION"] = place
-            temp_flow_df = temp_flow_df.fillna(value=np.nan)
-            temp_flow_df = temp_flow_df.reset_index(drop=True)
-            cat_df = pd.concat([cat_df, temp_flow_df], axis=0)
-        
-        cat_df.to_excel("./haha.xlsx", index=False)
+    flow_df = flow_df.groupby(['SITEREF', 'DATETIME', 'WEIGHT'])['FLOW'].sum().reset_index()
     
-    cat_df = pd.read_excel("./haha.xlsx")
-    cat_df = cat_df.rename({"FLOW":"Traffic flow"})
+    date_range1 = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
+    weight1 = ['Light'] * len(date_range1)
 
-    plt.figure(figsize=(8, 4))
-    g = sns.catplot(
-        data=cat_df, x="HOUR", y="FLOW", hue="REGION", col="WEIGHT",
-        capsize=.1, palette=region_palette, errorbar="se", hue_order=place_list,
-        kind="point", legend_out=True, linewidth=1.5)
+    # Create the second date range with 'Heavy' weight
+    date_range2 = pd.date_range(start="2019-01-01 00:00:00", end="2019-12-31 23:45:00", freq="15min")
+    weight2 = ['Heavy'] * len(date_range2)
 
-    for axis in range(len(g.axes.flat)):
-        ax = g.axes.flat[axis]
-        ax.tick_params(axis='both', which='major', labelsize=10.5)
-        x_ticks = ax.get_xticks()
-        ax.set_xticks(x_ticks[::2])  # Show every other tick
-        ax.set_xticklabels(x_ticks[::2])
+    # Create DataFrames for each range
+    df1 = pd.DataFrame({'DATETIME': date_range1, 'WEIGHT': weight1})
+    df2 = pd.DataFrame({'DATETIME': date_range2, 'WEIGHT': weight2})
+
+    # Concatenate the two DataFrames
+    cat_df = pd.concat([df1, df2]).reset_index(drop=True)
+
+    for iter in range(len(place_list)):
+        place = place_list[iter]
+        temp_flow_meta_gdf = flow_meta_list[iter]
+        temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+        temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
+        temp_flow_meta_gdf = temp_flow_meta_gdf[temp_flow_meta_gdf['SITEREF'] == temp_siteRef_list[0]]
+
+        result_dfs = []
+        for direction, group_df in temp_flow_df.groupby('WEIGHT'):
+            # Drop the 'DIRECTION' column
+            sub_df = group_df.drop(columns=['WEIGHT'])
+            # Apply the imputation function
+            imputed_df = flow_data_imputation(temp_flow_meta_gdf, sub_df, process_engine, False)
+            # Add the 'DIRECTION' column back
+            imputed_df['WEIGHT'] = direction
+            # Store the result
+            result_dfs.append(imputed_df)
+        # Concatenate all the results
+        temp_flow_df = pd.concat(result_dfs).reset_index(drop=True)
         
-        if axis == 0:
-            ax.set_xlabel("(a) Traffic flow of light duty vehicles", fontsize=10.5)
-            ax.set_ylabel("Traffic flow", fontsize=10.5)
-            ax.set_title("")
+        temp_flow_df = temp_flow_df.rename(columns={'FLOW':place})
+        temp_flow_df = temp_flow_df.groupby(['DATETIME', 'WEIGHT'])[place].mean()
+        print(temp_flow_df)
+        cat_df = pd.merge(cat_df, temp_flow_df, on=['DATETIME', "WEIGHT"], how="left")
+    
+    cat_df['Hour'] = cat_df['DATETIME'].dt.strftime('%H:%M')
+
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=False)
+    
+    print(cat_df)
+    for col_name in place_list:
+        sns.lineplot(x='Hour', y=col_name, errorbar=("ci", 95), data=cat_df[cat_df['WEIGHT'] == 'Light'], ax=axes[0], linewidth=1.5, color=region_palette.get(col_name))
+        sns.lineplot(x='Hour', y=col_name, errorbar=("ci", 95), data=cat_df[cat_df['WEIGHT'] == 'Heavy'], ax=axes[1], linewidth=1.5, color=region_palette.get(col_name))
+
+    for i in range(2):
+        axes[i].tick_params(axis='both', which='major', labelsize=10.5)
+        axes[i].set_xlim(cat_df.Hour.min(), cat_df.Hour.max())
+        axes[i].xaxis.set_major_locator(MaxNLocator(nbins=5))
+        if i == 0:
+            axes[i].set_xlabel("Time (hour)" + "\n" + "(a) Traffic flow of light duty vehicles", fontsize=10.5)
         else:
-            ax.set_xlabel("(b) Traffic flow of heavy duty vehicles", fontsize=10.5)
-            ax.set_title("")
+            axes[i].set_xlabel("Time (hour)" + "\n" + "(b) Traffic flow of heavy duty vehicles", fontsize=10.5)
     
-    g.despine(left=True)
+    axes[0].set_ylabel('Traffic flow', fontsize=10.5)
+    axes[1].set_ylabel('', fontsize=10.5)
+    #fig.text(0.5, 0.04, 'Time', ha='center', va='center', fontsize=10.5)
     
+    handles = [plt.Line2D([0], [0], color=color, lw=1.5) for color in region_palette.values()]
+    labels = list(region_palette.keys())
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.legend(handles, labels, loc='upper center', ncol=3, frameon=False, fontsize=10.5)
     plt.savefig(output_path + "flow_cat.png", dpi=600)
     plt.close()
     
@@ -915,7 +941,22 @@ def weight_proportion_visualization(place_list, flow_meta_list, flow_df, output_
         temp_flow_meta_gdf = flow_meta_list[iter]
         temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
         temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
-        temp_flow_df = temp_flow_df.fillna(value=np.nan)
+        temp_flow_meta_gdf = temp_flow_meta_gdf[temp_flow_meta_gdf['SITEREF'] == temp_siteRef_list[0]]
+
+        result_dfs = []
+        for weight, group_df in temp_flow_df.groupby('WEIGHT'):
+            # Drop the 'WEIGHT' column
+            sub_df = group_df.drop(columns=['WEIGHT'])
+            # Apply the imputation function
+            imputed_df = flow_data_imputation(temp_flow_meta_gdf, sub_df, process_engine, False)
+            # Add the 'WEIGHT' column back
+            imputed_df['WEIGHT'] = weight
+            # Store the result
+            result_dfs.append(imputed_df)
+        # Concatenate all the results
+        temp_flow_df = pd.concat(result_dfs).reset_index(drop=True)
+        
+        
         temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.strftime('%H:%M')
         temp_flow_df = temp_flow_df[["HOUR", "WEIGHT", "FLOW"]]
         temp_flow_df = temp_flow_df.groupby(['HOUR', 'WEIGHT']).mean().reset_index()
@@ -966,8 +1007,24 @@ def direction_line_visualization(place_list, flow_meta_list, flow_df, output_pat
     for iter in range(len(place_list)):
         temp_flow_meta_gdf = flow_meta_list[iter]
         temp_siteRef_list = temp_flow_meta_gdf["SITEREF"].to_list()
+        
+        # Imputation
         temp_flow_df = flow_df[flow_df['SITEREF'] == temp_siteRef_list[0]]
-        temp_flow_df = temp_flow_df.fillna(value=np.nan)
+        temp_flow_meta_gdf = temp_flow_meta_gdf[temp_flow_meta_gdf['SITEREF'] == temp_siteRef_list[0]]
+
+        result_dfs = []
+        for direction, group_df in temp_flow_df.groupby('DIRECTION'):
+            # Drop the 'DIRECTION' column
+            sub_df = group_df.drop(columns=['DIRECTION'])
+            # Apply the imputation function
+            imputed_df = flow_data_imputation(temp_flow_meta_gdf, sub_df, process_engine, False)
+            # Add the 'DIRECTION' column back
+            imputed_df['DIRECTION'] = direction
+            # Store the result
+            result_dfs.append(imputed_df)
+        # Concatenate all the results
+        temp_flow_df = pd.concat(result_dfs).reset_index(drop=True)
+        
         temp_flow_df["HOUR"] = temp_flow_df['DATETIME'].dt.strftime('%H:%M')
         temp_flow_df = temp_flow_df[["HOUR", "FLOW", "DIRECTION"]]
         temp_flow_df = temp_flow_df.groupby(['HOUR', 'DIRECTION']).mean().reset_index()
@@ -1056,7 +1113,7 @@ if __name__ == "__main__":
     light_merged_df = datetime_df.merge(light_pivot_df, on='DATETIME', how='left')
     
     # Visualize the missing data
-    #flow_missing_data_visualization(light_merged_df, "./result/flow/missing")
+    flow_missing_data_visualization(light_merged_df, "./result/flow/missing")
     """
     # Filter based on missing value percentage
     Session = sessionmaker(bind=process_engine)
@@ -1080,13 +1137,14 @@ if __name__ == "__main__":
         imputed_df = imputation(station_df, save_path="./result/flow/imputation", imputation_method=method)
         imputed_df = pd.read_excel("./result/flow/imputation/imputed_data_" + method + ".xlsx")
     """
-
+    """
     print("Imputation Visualization")
     station_df = pd.read_excel("./result/flow/imputation/raw.xlsx")
     imputation_visualization(station_df, '2019-12-10 00:00:00', '2019-12-13 00:00:00', 
                                         ["Forward", "Backward", "Forward-Backward"],
                                         "00200091",
                                         "./result/flow/imputation/")
+    """
     ####################################################################################################
     # Weight-percentage analysis
     # 047-Wellington 060-Christchurch 076-Auckland
@@ -1135,12 +1193,12 @@ if __name__ == "__main__":
     """
     print("Weekdays and weekends")
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
-    city_traffic_visualization(place_list, city_week_traffic_df, "./result/flow/")
+    #city_traffic_visualization(place_list, city_week_traffic_df, "./result/flow/")
     ####################################################################################################
     # Morning peak and afternoon peak of Auckland
     print("Morning afternoon peak")
     city_week_traffic_df = pd.read_excel("./result/flow/city_mean.xlsx")
-    morning_afternoon_peak_visualization(city_week_traffic_df, "./result/flow/")
+    #morning_afternoon_peak_visualization(city_week_traffic_df, "./result/flow/")
     ####################################################################################################
     # Weather correlation
     print("Weather correlation")
@@ -1258,4 +1316,4 @@ if __name__ == "__main__":
     #event_all_visualization(event_colors, event_df, "./result/event/")
 
     # Subplot
-    event_subplot_visualization(event_colors, event_df, "./result/event/")
+    #event_subplot_visualization(event_colors, event_df, "./result/event/")
