@@ -412,7 +412,7 @@ def df_to_gdf(df, lon_name, lat_name):
     """convert dataframe to geodataframe
 
     Args:
-        df (dataframe): _description_
+        df (dataframe): input dataframe for conversion
         lon_name (string): column name for longitude
         lat_name (string): column name for latitude
 
