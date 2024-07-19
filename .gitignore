@@ -12,3 +12,4 @@
 *.xlsx
 *.db
 *.png
+database_fig.py
