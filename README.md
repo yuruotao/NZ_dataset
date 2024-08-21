@@ -29,13 +29,39 @@ The sources of data are summarized here.
 
 |       Data       |                                                          Data Source                                                          |
 | :---------------: | :---------------------------------------------------------------------------------------------------------------------------: |
-|  City Districts  |                                                             [NZTA]()                                                             |
+|  City Districts  |                                                             [NZTA](https://datafinder.stats.govt.nz/)                                                             |
 |    Coastlines    |                   [LINZ](https://data.linz.govt.nz/layer/51560-nz-coastlines-and-islands-polygons-topo-1500k/)                   |
 | Highway Structure |                           [LINZ](https://data.linz.govt.nz/layer/50329-nz-road-centrelines-topo-150k/)                           |
 |   Vehicle Flow   |             [Waka Kotahi](https://opendata-nzta.opendata.arcgis.com/datasets/41e05dcdfcb749d390f7785543fb3b14/about)             |
 |      Weather      |                             [NOAA](https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/)                             |
 |      Holiday      | [MBIE](https://www.employment.govt.nz/leave-and-holidays/public-holidays/previous-years-public-holidays-and-anniversary-dates#/) |
 |  Extreme Weather  |                                                 [NIWA](https://hwe.niwa.co.nz/ )                                                 |
+
+The data downloaded from Figshare should be grouped as below. For shapefiles, the .shp document is the one you interact with. For the usage of other documents, you can visit [this page](https://en.wikipedia.org/wiki/Shapefile) 
+```yaml
+    Data downloaded from Figshare
+    ├── data                            # Contain the data to be analyzed (download from figshare)
+         ├── city_districts             # Boundary shapefiles
+         │   ├── city_districts.cpg     
+         │   ├── city_districts.dbf     
+         │   ├── city_districts.prj     
+         │   ├── city_districts.shp     # Document to interact with
+         │   ├── city_districts.xml 
+         │   ├── city_districts.txt     # Specifications of data    
+         │   ├── city_districts.sbx     
+         │   ├── city_districts.pdf     # Comments for shapefile
+         │   ├── city_districts.shx
+         │   └── city_districts.sbn
+         ├── state_highway              # New Zealand state highway shapefile
+         │   ├── state_highway.cpg      
+         │   ├── state_highway.dbf      
+         │   ├── state_highway.prj      
+         │   ├── state_highway.shp      # Document to interact with
+         │   ├── state_highway.shp.xml  
+         │   └── state_highway.cpg      
+         └── NZDB/NZDB.db               # SQLite3 database, can be viewed with vscode plugins or softwares like sqlitebrowser
+                                        # The tables and keys are documented in paper
+```
 
 ## Usage Note
 
