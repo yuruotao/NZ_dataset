@@ -184,7 +184,7 @@ def flow_missing_data_visualization(input_df, output_path):
         ax.tick_params(labelsize=10.5)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         plt.xlabel("Traffic flow monitoring sites", fontsize=10.5)
-        plt.savefig(missing_matrix_path + 'matrix_' + str(index) + '.png', dpi=600)
+        plt.savefig(missing_matrix_path + 'matrix_' + str(index) + '.svg', format="svg", dpi=1200)
         plt.close()
         
         # Bar plot
@@ -192,7 +192,7 @@ def flow_missing_data_visualization(input_df, output_path):
         ax.tick_params(labelsize=10.5)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         plt.xlabel("Traffic flow monitoring sites", fontsize=10.5)
-        plt.savefig(missing_bar_path + 'bar_' + str(index) + '.png', dpi=600)
+        plt.savefig(missing_bar_path + 'bar_' + str(index) + '.svg', format="svg", dpi=1200)
         plt.close()
         
         index = index + 1
@@ -1114,6 +1114,8 @@ if __name__ == "__main__":
     
     # Visualize the missing data
     flow_missing_data_visualization(light_merged_df, "./result/flow/missing")
+    print("Done")
+    time.sleep(100000)
     """
     # Filter based on missing value percentage
     Session = sessionmaker(bind=process_engine)

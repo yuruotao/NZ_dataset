@@ -13,3 +13,4 @@
 *.db
 *.png
 database_fig.py
+*.svg

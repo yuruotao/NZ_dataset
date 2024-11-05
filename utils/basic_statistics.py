@@ -32,7 +32,8 @@ def basic_statistics(input_df):
                            'PERCENTILE_2_5':input_df.quantile(q=0.025),
                            'PERCENTILE_50':input_df.quantile(q=0.5),
                            'PERCENTILE_97_5':input_df.quantile(q=0.975),
-                           'PERCENTILE_100':input_df.quantile(q=1)
+                           'PERCENTILE_100':input_df.quantile(q=1),
+                           "PERCENTAGE_MISSING":input_df.isna().sum() / len(input_df) * 100
                            },
                    dtype = 'float')
     STA_df["INDICATOR"] = input_df.columns
