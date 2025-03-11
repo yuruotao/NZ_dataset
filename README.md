@@ -70,10 +70,15 @@ To run the code, you need to first download the code and data from figshare, mov
 This repository is under MIT License, please feel free to use. If you find this repository helpful, please cite the following bibtex entry:
 
 ```
-@article{,
-  title={High-resolution synthetic highway traffic data: a case study in New Zealand},
-  author={yuruotao},
-  year={2024}
+@article{li2024high,
+  title={High-resolution multi-source traffic data in New Zealand},
+  author={Li, Bo and Yu, Ruotao and Chen, Zijun and Ding, Yingzhe and Yang, Mingxia and Li, Jinghua and Wang, Jianxiao and Zhong, Haiwang},
+  journal={Scientific Data},
+  volume={11},
+  number={1},
+  pages={1216},
+  year={2024},
+  publisher={Nature Publishing Group UK London}
 }
 ```
 
