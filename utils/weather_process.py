@@ -74,6 +74,7 @@ class basic_statistics_sql_class(Base):
     PERCENTILE_50 = Column(Float)
     PERCENTILE_97_5 = Column(Float)
     PERCENTILE_100 = Column(Float)
+    PERCENTAGE_MISSING = Column(Float)
 
 def weather_missing_data_visualization(input_df, output_path):
     """Visualize the missing data of flow data
