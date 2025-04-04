@@ -2,10 +2,10 @@
 
 ## Introduction
 
-Here contains the raw data and scripts for data processing and visualization for paper "[High-resolution synthetic highway traffic data: a case study in New Zealand]()". The data is deposited at [Figshare](), here we include the analysis of example data (South Island of New Zealand) for demonstration. The tree structure of this repository is shown below.
+Here contains the raw data and scripts for data processing and visualization for paper "[High-resolution multi-source traffic data in New Zealand](https://www.nature.com/articles/s41597-024-04067-5)". The data is deposited at [Figshare](https://springernature.figshare.com/articles/dataset/High-resolution_multi-source_traffic_data_a_case_study_in_New_Zealand/26965246), here we include the analysis of example data (South Island of New Zealand) for demonstration. The tree structure of this repository is shown below.
 
 ```yaml
-    High-resolution synthetic highway traffic data: a case study in New Zealand
+    High-resolution multi-source traffic data in New Zealand
     ├── data				# Contain the data to be analyzed (download from figshare)
     │    ├── boundary			# Boundary shapefiles
     │    ├── state_highway		# New Zealand state highway shapefile
@@ -70,10 +70,15 @@ To run the code, you need to first download the code and data from figshare, mov
 This repository is under MIT License, please feel free to use. If you find this repository helpful, please cite the following bibtex entry:
 
 ```
-@article{,
-  title={High-resolution synthetic highway traffic data: a case study in New Zealand},
-  author={yuruotao},
-  year={2024}
+@article{li2024high,
+  title={High-resolution multi-source traffic data in New Zealand},
+  author={Li, Bo and Yu, Ruotao and Chen, Zijun and Ding, Yingzhe and Yang, Mingxia and Li, Jinghua and Wang, Jianxiao and Zhong, Haiwang},
+  journal={Scientific Data},
+  volume={11},
+  number={1},
+  pages={1216},
+  year={2024},
+  publisher={Nature Publishing Group UK London}
 }
 ```
 
